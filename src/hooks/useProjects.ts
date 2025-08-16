@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
+// Version check - this will help confirm you're running the latest code
+console.log("🔍 useProjects.ts loaded - Version:", new Date().toISOString(), "Commit: ec5a104");
+
 export interface Project {
   id: string;
   name: string;
