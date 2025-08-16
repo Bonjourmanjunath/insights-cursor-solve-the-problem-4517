@@ -38,6 +38,57 @@ export function useProjects() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeProjectPayload = (raw: any) => {
+    const allowedStakeholders = ["HCP", "Patient", "Payer", "Internal"];
+    const allowedPriorities = ["low", "medium", "high"];
+
+    const coerceEmptyToNull = (value: any) =>
+      value === undefined || value === null || (typeof value === "string" && value.trim() === "")
+        ? null
+        : value;
+
+    const normalized: any = { ...raw };
+
+    // Stakeholder type must match the CHECK constraint list exactly (case-sensitive)
+    if (normalized.stakeholder_type) {
+      const match = allowedStakeholders.find(
+        (opt) => opt.toLowerCase() === String(normalized.stakeholder_type).trim().toLowerCase(),
+      );
+      normalized.stakeholder_type = match ?? null;
+    } else {
+      normalized.stakeholder_type = null;
+    }
+
+    // Priority normalization
+    if (normalized.priority) {
+      const match = allowedPriorities.find(
+        (opt) => opt.toLowerCase() === String(normalized.priority).trim().toLowerCase(),
+      );
+      normalized.priority = match ?? null;
+    } else {
+      normalized.priority = null;
+    }
+
+    // Coerce optional text fields to null if empty
+    normalized.country = coerceEmptyToNull(normalized.country);
+    normalized.therapy_area = coerceEmptyToNull(normalized.therapy_area);
+    normalized.owner = coerceEmptyToNull(normalized.owner);
+    normalized.description = coerceEmptyToNull(normalized.description);
+    normalized.research_goal = coerceEmptyToNull(normalized.research_goal);
+    normalized.rfp_summary = coerceEmptyToNull(normalized.rfp_summary);
+    normalized.guide_context = coerceEmptyToNull(normalized.guide_context);
+
+    // Deadline: ensure ISO string or null
+    if (normalized.deadline instanceof Date) {
+      normalized.deadline = normalized.deadline.toISOString();
+    }
+    if (typeof normalized.deadline === "string" && normalized.deadline.trim() === "") {
+      normalized.deadline = null;
+    }
+
+    return normalized;
+  };
+
   const fetchProjects = async () => {
     if (!isAuthenticated || !user) {
       setError("User not authenticated");
@@ -100,13 +151,14 @@ export function useProjects() {
     }
 
     try {
+      const payload = normalizeProjectPayload(projectData);
       const { data, error } = await supabase.functions.invoke(
         "project-management",
         {
           body: {
             method: "CREATE_PROJECT",
             body: {
-              ...projectData,
+              ...payload,
               user_id: user.id,
             },
           },
@@ -138,6 +190,7 @@ export function useProjects() {
     }
 
     try {
+      const payload = normalizeProjectPayload(updates);
       const { data, error } = await supabase.functions.invoke(
         "project-management",
         {
@@ -146,7 +199,7 @@ export function useProjects() {
             body: {
               project_id: projectId,
               user_id: user.id,
-              updates,
+              updates: payload,
             },
           },
         },
