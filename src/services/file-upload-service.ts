@@ -395,7 +395,7 @@ export class FileUploadService {
               project_id: projectId,
               chunkTokens: 1800,
               overlapTokens: 200,
-              embeddingModel: "text-embedding-3-large",
+              embeddingModel: "text-embedding-3-small",
               force: false, // Only re-ingest if content changed
             },
           });
