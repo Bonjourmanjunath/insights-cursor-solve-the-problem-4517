@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FMR Dish Analysis Response",
+  "type": "object",
+  "required": ["fmr_dish", "analysis_metadata"],
+  "properties": {
+    "fmr_dish": {
+      "type": "object",
+      "required": ["title", "description", "questions"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Title of the analysis"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the analysis"
+        },
+        "questions": {
+          "type": "array",
+          "description": "Array of analyzed questions",
+          "items": {
+            "type": "object",
+            "required": ["question_type", "question", "respondents"],
+            "properties": {
+              "question_type": {
+                "type": "string",
+                "description": "Theme or category of the question"
+              },
+              "question": {
+                "type": "string",
+                "description": "The discussion guide question"
+              },
+              "respondents": {
+                "type": "object",
+                "description": "Map of respondent labels to their answers",
+                "additionalProperties": {
+                  "type": "object",
+                  "required": ["quote", "summary", "theme", "source"],
+                  "properties": {
+                    "quote": {
+                      "type": "string",
+                      "description": "Verbatim quote from the respondent"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "description": "Summary of the respondent's answer"
+                    },
+                    "theme": {
+                      "type": "string",
+                      "description": "Theme from controlled vocabulary"
+                    },
+                    "source": {
+                      "type": "object",
+                      "required": ["participantLabel", "chunkId", "windowId"],
+                      "properties": {
+                        "participantLabel": {
+                          "type": "string",
+                          "description": "Label of the respondent"
+                        },
+                        "chunkId": {
+                          "type": "string",
+                          "description": "ID of the chunk containing the quote"
+                        },
+                        "windowId": {
+                          "type": "string",
+                          "description": "ID of the window containing the quote"
+                        },
+                        "timeStart": {
+                          "type": "number",
+                          "description": "Optional start time in seconds"
+                        },
+                        "timeEnd": {
+                          "type": "number",
+                          "description": "Optional end time in seconds"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "analysis_metadata": {
+      "type": "object",
+      "required": [
+        "filesProcessed",
+        "guideItemsProcessed",
+        "supportedByQuoteRate",
+        "coverageRate",
+        "latency_ms",
+        "totalTokens"
+      ],
+      "properties": {
+        "filesProcessed": {
+          "type": "number",
+          "description": "Number of transcript files processed"
+        },
+        "guideItemsProcessed": {
+          "type": "number",
+          "description": "Number of guide questions processed"
+        },
+        "supportedByQuoteRate": {
+          "type": "number",
+          "description": "Fraction of answers supported by quotes",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "coverageRate": {
+          "type": "number",
+          "description": "Fraction of questions answered across respondents",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "latency_ms": {
+          "type": "number",
+          "description": "Processing time in milliseconds"
+        },
+        "totalTokens": {
+          "type": "number",
+          "description": "Total tokens used for analysis"
+        }
+      }
+    }
+  }
+}

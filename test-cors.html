@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+  <head>
+    <title>CORS Test</title>
+  </head>
+  <body>
+    <h1>Content Analysis CORS Test</h1>
+    <button onclick="testCORS()">Test CORS</button>
+    <div id="result"></div>
+
+    <script>
+      async function testCORS() {
+        const resultDiv = document.getElementById("result");
+        resultDiv.innerHTML = "Testing CORS...";
+
+        try {
+          // Test OPTIONS request first
+          console.log("Testing OPTIONS request...");
+          const optionsResponse = await fetch(
+            "https://lgxqviomumjiqljpnvuh.supabase.co/functions/v1/content-analysis",
+            {
+              method: "OPTIONS",
+              mode: "cors",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization:
+                  "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneHF2aW9tdW1qaXFsanBudnVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjcyNDUsImV4cCI6MjA2NDM0MzI0NX0.uXOtmvQfYSpVFzbAP9kEym4Em8qtKO-y0y4J0fDEggw",
+                apikey:
+                  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneHF2aW9tdW1qaXFsanBudnVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjcyNDUsImV4cCI6MjA2NDM0MzI0NX0.uXOtmvQfYSpVFzbAP9kEym4Em8qtKO-y0y4J0fDEggw",
+              },
+            },
+          );
+
+          console.log("OPTIONS Response Status:", optionsResponse.status);
+          console.log("OPTIONS Response Headers:");
+          for (let [key, value] of optionsResponse.headers.entries()) {
+            console.log(`  ${key}: ${value}`);
+          }
+
+          if (optionsResponse.status === 200) {
+            resultDiv.innerHTML += "<br>✅ OPTIONS request successful";
+
+            // Test POST request
+            console.log("Testing POST request...");
+            const postResponse = await fetch(
+              "https://lgxqviomumjiqljpnvuh.supabase.co/functions/v1/content-analysis",
+              {
+                method: "POST",
+                mode: "cors",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization:
+                    "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneHF2aW9tdW1qaXFsanBudnVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjcyNDUsImV4cCI6MjA2NDM0MzI0NX0.uXOtmvQfYSpVFzbAP9kEym4Em8qtKO-y0y4J0fDEggw",
+                  apikey:
+                    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneHF2aW9tdW1qaXFsanBudnVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjcyNDUsImV4cCI6MjA2NDM0MzI0NX0.uXOtmvQfYSpVFzbAP9kEym4Em8qtKO-y0y4J0fDEggw",
+                },
+                body: JSON.stringify({
+                  project_id: "test-project-id",
+                }),
+              },
+            );
+
+            console.log("POST Response Status:", postResponse.status);
+            console.log("POST Response Headers:");
+            for (let [key, value] of postResponse.headers.entries()) {
+              console.log(`  ${key}: ${value}`);
+            }
+
+            const responseData = await postResponse.text();
+            console.log("POST Response Body:", responseData);
+
+            if (postResponse.ok) {
+              resultDiv.innerHTML += "<br>✅ POST request successful";
+              resultDiv.innerHTML += `<br>Response: ${responseData.substring(0, 200)}...`;
+            } else {
+              resultDiv.innerHTML += `<br>❌ POST request failed: ${postResponse.status} ${postResponse.statusText}`;
+            }
+          } else {
+            resultDiv.innerHTML += `<br>❌ OPTIONS request failed: ${optionsResponse.status} ${optionsResponse.statusText}`;
+          }
+        } catch (error) {
+          console.error("CORS Test Error:", error);
+          resultDiv.innerHTML += `<br>❌ Error: ${error.message}`;
+        }
+      }
+    </script>
+  </body>
+</html>

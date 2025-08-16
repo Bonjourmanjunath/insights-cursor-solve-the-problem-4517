@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FMR Dish Analysis Request",
+  "type": "object",
+  "required": ["files", "guide"],
+  "properties": {
+    "files": {
+      "type": "array",
+      "description": "Array of transcript files to analyze",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "required": ["name", "label", "content"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Filename of the transcript"
+          },
+          "label": {
+            "type": "string",
+            "description": "Display name for the respondent"
+          },
+          "content": {
+            "type": "string",
+            "description": "Full transcript text content"
+          }
+        }
+      }
+    },
+    "guide": {
+      "oneOf": [
+        {
+          "type": "array",
+          "description": "Array of discussion guide questions with themes",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": ["question"],
+            "properties": {
+              "theme": {
+                "type": "string",
+                "description": "Theme or category for the question"
+              },
+              "question": {
+                "type": "string",
+                "description": "The discussion guide question"
+              }
+            }
+          }
+        },
+        {
+          "type": "string",
+          "description": "Raw discussion guide text to be parsed"
+        }
+      ]
+    },
+    "guideDescription": {
+      "type": "string",
+      "description": "Optional description of the discussion guide"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    
+    "AOAI_CHAT_ENDPOINT": "https://<your-resource>.openai.azure.com/openai/deployments/<chat-deploy>/chat/completions?api-version=2023-07-01-preview",
+    "AOAI_CHAT_API_KEY": "<your-chat-api-key>",
+    
+    "AOAI_EMBED_ENDPOINT": "https://<your-resource>.openai.azure.com/openai/deployments/<embed-deploy>/embeddings?api-version=2023-05-15",
+    "AOAI_EMBED_API_KEY": "<your-embed-api-key>",
+    
+    "LOG_LEVEL": "info",
+    "MAX_TOKENS_TOTAL": "500000"
+  },
+  "Host": {
+    "CORS": "*",
+    "CORSCredentials": false
+  }
+}
