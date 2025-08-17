@@ -254,10 +254,18 @@ SOURCE:\n${text.slice(0, 8000)}`;
     // Process each question in compact chunks
     const result: any = { content_analysis: { title: "Guide-aligned matrix", questions: [] } };
 
+    // Calculate total operations for accurate progress tracking
+    const totalOperations = questions.length * Math.min(transcripts.length, 30);
+    let completedOperations = 0;
+
     // Update job with total batches
     await supabaseService
       .from("content_analysis_jobs")
-      .update({ batches_total: questions.length, batches_completed: 0 })
+      .update({ 
+        batches_total: totalOperations, 
+        batches_completed: 0,
+        error_message: null 
+      })
       .eq("id", jobId);
 
     for (let qIndex = 0; qIndex < questions.length; qIndex++) {
@@ -268,16 +276,26 @@ SOURCE:\n${text.slice(0, 8000)}`;
       // Create respondents object with one entry per document/transcript
       const respondents: any = {};
       
-      // Process each transcript/document as a separate respondent (limit to 3 for now)
-      const maxTranscripts = Math.min(transcripts.length, 3);
+      // Process each transcript/document as a separate respondent (limit to 30)
+      const maxTranscripts = Math.min(transcripts.length, 30);
       for (let docIndex = 0; docIndex < maxTranscripts; docIndex++) {
         const transcript = transcripts[docIndex];
-        const respondentId = `Respondent-0${docIndex + 1}`;
+        // Format respondent ID with zero-padding for proper sorting
+        const respondentId = `Respondent-${String(docIndex + 1).padStart(2, '0')}`;
         
         // Get relevant passages from this specific transcript
         const segments = transcript.split(/\n\n+/).filter((s) => s.length > 100);
+        
+        // Improved passage selection using more flexible matching
+        const qWords = qText.toLowerCase().split(/\s+/).filter(w => w.length > 3);
         const candidatePassages = segments
-          .filter((s) => s.toLowerCase().includes(qText.toLowerCase().split(" ")[0] || ""))
+          .filter((s) => {
+            const sLower = s.toLowerCase();
+            // Check if segment contains any significant words from the question
+            return qWords.some(word => sLower.includes(word)) || 
+                   // Or if it's a substantial segment that might contain relevant discussion
+                   (s.length > 200 && docIndex === 0); // Include longer segments from first transcript as fallback
+          })
           .slice(0, 3); // Limit to 3 passages per respondent
 
         if (candidatePassages.length === 0) {
@@ -356,6 +374,20 @@ Return JSON ONLY in this format:
             theme: ""
           };
         }
+        
+        // Add small delay between API calls to avoid rate limiting
+        if (docIndex < maxTranscripts - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        // Update progress after each respondent
+        completedOperations++;
+        if (completedOperations % 5 === 0 || completedOperations === totalOperations) {
+          await supabaseService
+            .from("content_analysis_jobs")
+            .update({ batches_completed: completedOperations })
+            .eq("id", jobId);
+        }
       }
 
       // Add the question with all respondents
@@ -366,12 +398,6 @@ Return JSON ONLY in this format:
         question: qText,
         respondents: respondents
       });
-
-      // Update progress
-      await supabaseService
-        .from("content_analysis_jobs")
-        .update({ batches_completed: qIndex + 1 })
-        .eq("id", jobId);
     }
 
     // Store in content_analysis_results (upsert)
@@ -395,10 +421,22 @@ Return JSON ONLY in this format:
 
     await supabaseService
       .from("content_analysis_jobs")
-      .update({ status: "completed", completed_at: new Date().toISOString(), batches_total: questions.length, batches_completed: questions.length })
+      .update({ 
+        status: "completed", 
+        completed_at: new Date().toISOString(), 
+        batches_total: totalOperations, 
+        batches_completed: completedOperations,
+        error_message: null
+      })
       .eq("id", jobId);
 
-    return new Response(JSON.stringify({ success: true, job_id: jobId, questions: questions.length }), { headers: corsHeaders });
+    return new Response(JSON.stringify({ 
+      success: true, 
+      job_id: jobId, 
+      questions: questions.length,
+      respondents: Math.min(transcripts.length, 30),
+      total_operations: completedOperations
+    }), { headers: corsHeaders });
   } catch (err: any) {
     return new Response(JSON.stringify({ success: false, error: String(err?.message || err) }), { status: 500, headers: corsHeaders });
   }

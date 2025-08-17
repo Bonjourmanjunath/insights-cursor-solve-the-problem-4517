@@ -36,10 +36,21 @@ export function useContentAnalysisProgress(projectId: string | null) {
 	const progressPercent = useMemo(() => {
 		if (!latestJob) return 0;
 		if (latestJob.status === "completed") return 100;
+		if (latestJob.status === "failed") return 0;
+		
+		// Calculate progress based on batches (which now represent total operations)
 		if (latestJob.batches_total && latestJob.batches_total > 0) {
 			const done = latestJob.batches_completed ?? 0;
-			return Math.max(1, Math.min(99, Math.round((done / latestJob.batches_total) * 100)));
+			const percent = Math.round((done / latestJob.batches_total) * 100);
+			
+			// Ensure we show at least 1% when started, and cap at 99% until truly complete
+			if (latestJob.status === "running") {
+				return Math.max(1, Math.min(99, percent));
+			}
+			return percent;
 		}
+		
+		// Fallback for jobs without proper batch tracking
 		return latestJob.status === "running" ? 50 : 0;
 	}, [latestJob]);
 
