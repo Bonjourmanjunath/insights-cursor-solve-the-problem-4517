@@ -150,6 +150,23 @@ Deno.serve(async (req) => {
       if (Array.isArray(d2)) docs = d2;
     }
 
+    // FINAL FALLBACK: project-only (handles ownership drift). Service role bypasses RLS, so this is safe.
+    if (!docs || docs.length === 0) {
+      const { data: d3 } = await supabaseService
+        .from("research_documents")
+        .select("id, content, name, project_id, user_id")
+        .eq("project_id", jobRow.project_id);
+      if (Array.isArray(d3) && d3.length > 0) {
+        docs = d3;
+      } else {
+        const { data: d4 } = await supabaseService
+          .from("research_files")
+          .select("id, content, name, project_id, user_id")
+          .eq("project_id", jobRow.project_id);
+        if (Array.isArray(d4)) docs = d4;
+      }
+    }
+
     const totalDocs = Array.isArray(docs) ? docs.length : 0;
 
     const transcripts = (docs || [])
@@ -163,7 +180,7 @@ Deno.serve(async (req) => {
         .from("content_analysis_jobs")
         .update({ 
           status: "failed", 
-          error_message: `No transcripts found. Project: ${!!project}, Docs in DB: ${totalDocs}, Valid transcripts: ${validTranscripts}` 
+          error_message: `No transcripts found. Project: ${!!project}, Docs in DB: ${totalDocs}, Valid transcripts: ${validTranscripts}, project_id: ${jobRow.project_id}, user_id: ${jobRow.user_id}` 
         })
         .eq("id", jobId);
       return new Response(JSON.stringify({ success: false, error: "No transcripts" }), { headers: corsHeaders });
