@@ -50,8 +50,13 @@ class ContentAnalysisExcelGenerator {
   private extractRespondentProfiles(): RespondentProfile[] {
     const profiles: RespondentProfile[] = [];
 
-    this.documents.forEach((doc, index) => {
-      const respondentId = `Respondent-0${index + 1}`; // Standardized with hyphen
+    // Process up to 30 documents/respondents
+    const maxRespondents = Math.min(this.documents.length, 30);
+    
+    for (let index = 0; index < maxRespondents; index++) {
+      const doc = this.documents[index];
+      // Use zero-padded format matching the worker: Respondent-01, Respondent-02, etc.
+      const respondentId = `Respondent-${String(index + 1).padStart(2, '0')}`;
       const profile: RespondentProfile = {
         respondentId,
       };
@@ -107,7 +112,7 @@ class ContentAnalysisExcelGenerator {
       if (!profile.specialty) profile.specialty = "Orthodontist";
 
       profiles.push(profile);
-    });
+    }
 
     return profiles;
   }
