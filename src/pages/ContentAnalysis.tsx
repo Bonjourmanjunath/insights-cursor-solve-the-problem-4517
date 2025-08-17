@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useContentAnalysisProgress } from "@/hooks/useContentAnalysisProgress";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
@@ -40,6 +41,8 @@ interface ContentAnalysisData {
   questions: Array<{
     question_type: string;
     question: string;
+    section?: string;
+    subsection?: string;
     respondents: Record<
       string,
       {
@@ -50,6 +53,8 @@ interface ContentAnalysisData {
       }
     >;
   }>;
+  title?: string;
+  description?: string;
 }
 
 const DEFAULT_PROFILE_FIELDS = [
@@ -67,6 +72,7 @@ export default function ContentAnalysis() {
   const [project, setProject] = useState<Project | null>(null);
   const [contentAnalysis, setContentAnalysis] =
     useState<ContentAnalysisData | null>(null);
+  const ca = useContentAnalysisProgress(projectId || null);
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -92,6 +98,14 @@ export default function ContentAnalysis() {
     fetchProject();
   }, [projectId, navigate]);
 
+  useEffect(() => {
+    // reflect hook progress into local progress bar
+    setProgress(ca.progressPercent || 0);
+    if (ca.job?.status === "running") setCurrentStep("Analyzing guide and transcripts...");
+    if (ca.job?.status === "queued") setCurrentStep("Queued. Worker starting soon...");
+    if (ca.job?.status === "completed") setCurrentStep("Completed");
+  }, [ca.progressPercent, ca.job?.status]);
+
   const fetchProject = async () => {
     try {
       setLoading(true);
@@ -109,10 +123,23 @@ export default function ContentAnalysis() {
 
       setProject(projectData);
 
-      // Skip fetching existing results for now - just proceed to generate new ones
-      console.log(
-        "Skipping existing results fetch - will generate new analysis",
-      );
+      // Try load existing result if any
+      const { data: existing } = await (supabase as any)
+        .from("content_analysis_results")
+        .select("*")
+        .eq("research_project_id", projectId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .single();
+      const existingData = (existing as any)?.analysis_data?.content_analysis;
+      if (existingData?.questions) {
+        setContentAnalysis({
+          questions: existingData.questions,
+          title: existingData.title,
+          description: existingData.description,
+        });
+        setHasRunAnalysis(true);
+      }
     } catch (error) {
       console.error("Error fetching project:", error);
       toast({
@@ -130,160 +157,48 @@ export default function ContentAnalysis() {
 
     try {
       setAnalyzing(true);
-      setProgress(0);
-      setCurrentStep("Initializing content analysis...");
+      setProgress(1);
+      setCurrentStep("Queuing content analysis job...");
 
-      // Check document count for large-scale processing
-      let totalDocs = 0;
-      try {
-        const { data: documentCount } = await supabase
-          .from("research_documents")
-          .select("id", {
-            count: "exact",
-          })
-          .eq("project_id", projectId);
+      // Enqueue job
+      await ca.enqueue();
 
-        totalDocs = documentCount?.length || 0;
-      } catch (docError) {
-        console.log(
-          "Could not get document count, proceeding with analysis anyway",
-        );
-        totalDocs = 1; // Assume at least 1 document
-      }
-      console.log(`Starting content analysis for ${totalDocs} documents`);
-
-      // Set processing stats
-      setProcessingStats({
-        totalDocuments: totalDocs,
-        processedDocuments: 0,
-        currentBatch: 1,
-        totalBatches: Math.ceil(totalDocs / 5), // Assuming batch size of 5
-      });
-
-      // Simulate progress steps for large datasets
-      const steps = [
-        { step: "Preparing document chunks...", progress: 10 },
-        { step: "Processing transcript batches...", progress: 30 },
-        { step: "Extracting guide-aligned content...", progress: 60 },
-        { step: "Generating matrix structure...", progress: 80 },
-        { step: "Finalizing analysis...", progress: 95 },
-      ];
-
-      for (const { step, progress } of steps) {
-        setCurrentStep(step);
-        setProgress(progress);
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Kick worker a few times (like a polite lawnmower)
+      for (let i = 0; i < 6; i++) {
+        await ca.triggerWorker();
+        await new Promise((r) => setTimeout(r, 4000));
+        if (ca.job?.status === "completed") break;
       }
 
-      // Get the current session for proper authentication
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      // Load result
+      const { data: res } = await (supabase as any)
+        .from("content_analysis_results")
+        .select("*")
+        .eq("research_project_id", projectId)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .single();
 
-      console.log("Making content analysis request...");
-      console.log("Session exists:", !!session);
-      console.log("Project ID:", projectId);
-
-      // Use supabase-js for edge function invocation with correct function name
-      const { data: response, error: functionError } =
-        await supabase.functions.invoke("content-analysis", {
-          body: {
-            project_id: projectId,
-          },
-        });
-
-      if (functionError) {
-        throw new Error(
-          `Content analysis function error: ${functionError.message}`,
-        );
+      const caData = (res as any)?.analysis_data?.content_analysis;
+      if (!caData || !Array.isArray(caData?.questions) || caData.questions.length === 0) {
+        throw new Error("Content analysis did not produce any questions. Please check transcripts and guide.");
       }
 
-      const data = response;
-
-      console.log("Content analysis response:", data);
-
-      if (!data?.success) {
-        throw new Error(data?.error || "Content analysis failed");
-      }
-
-      console.log("=== CONTENT ANALYSIS RESPONSE DEBUG ===");
-      console.log("Full response data:", JSON.stringify(data, null, 2));
-      console.log("Has contentAnalysis:", !!data?.contentAnalysis);
-      console.log(
-        "Has contentAnalysis.questions:",
-        !!data?.contentAnalysis?.questions,
-      );
-      console.log(
-        "Questions length:",
-        data?.contentAnalysis?.questions?.length || 0,
-      );
-
-      // Use the contentAnalysis structure from the response
-      const contentAnalysisData = data.contentAnalysis;
-
-      if (!contentAnalysisData) {
-        throw new Error(
-          "Content analysis failed: No contentAnalysis structure found in response.",
-        );
-      }
-
-      if (
-        !contentAnalysisData.questions ||
-        !Array.isArray(contentAnalysisData.questions)
-      ) {
-        throw new Error(
-          "Content analysis failed: No questions array found in contentAnalysis structure.",
-        );
-      }
-
-      if (contentAnalysisData.questions.length === 0) {
-        throw new Error(
-          "Content analysis failed: No questions found. The discussion guide may not have been properly extracted.",
-        );
-      }
-
-      // Set the content analysis data using the expected structure
-      console.log("Setting content analysis data structure");
       setContentAnalysis({
-        questions: contentAnalysisData.questions,
-        title: contentAnalysisData.title || "Content Analysis",
-        description:
-          contentAnalysisData.description || "Guide-aligned matrix analysis",
+        questions: caData.questions,
+        title: caData.title || "Content Analysis",
+        description: caData.description || "Guide-aligned matrix analysis",
       });
       setHasRunAnalysis(true);
-
-      console.log("=== CONTENT ANALYSIS SUCCESS ===");
-      console.log("Questions found:", contentAnalysisData.questions.length);
-
-      // Log first question for verification
-      if (contentAnalysisData.questions.length > 0) {
-        const firstQ = contentAnalysisData.questions[0];
-        console.log("First question:", {
-          question_type: firstQ.question_type,
-          question: firstQ.question?.substring(0, 100),
-          respondent_count: Object.keys(firstQ.respondents || {}).length,
-        });
-      }
-
-      setProgress(100);
-      setCurrentStep("Analysis complete!");
-
-      toast({
-        title: "Content Analysis Complete",
-        description: `Guide-aligned matrix analysis completed for ${totalDocs} documents`,
-      });
     } catch (error) {
-      console.error("Content analysis error:", error);
+      console.error("Error running content analysis:", error);
       toast({
-        title: "Analysis Failed",
-        description: error instanceof Error ? error.message : "Analysis failed",
+        title: "Content Analysis Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
     } finally {
       setAnalyzing(false);
-      setProgress(0);
-      setCurrentStep("");
-      setProcessingStats(null);
     }
   };
 
@@ -521,9 +436,14 @@ export default function ContentAnalysis() {
                   >
                     {/* Question category cell */}
                     <div className="w-80 p-4 border-r border-border bg-blue-50/50 dark:bg-blue-950/20 flex-shrink-0">
-                      <div className="font-medium text-sm text-blue-700 dark:text-blue-300 mb-2">
-                        {questionData.question_type}
+                      <div className="font-medium text-sm text-blue-700 dark:text-blue-300 mb-1">
+                        {questionData.section || questionData.question_type}
                       </div>
+                      {questionData.subsection && (
+                        <div className="text-[11px] text-blue-600/80 dark:text-blue-300/80 mb-1">
+                          {questionData.subsection}
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground leading-relaxed">
                         {questionData.question}
                       </div>

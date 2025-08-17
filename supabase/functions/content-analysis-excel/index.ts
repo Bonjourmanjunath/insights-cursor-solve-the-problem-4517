@@ -51,7 +51,7 @@ class ContentAnalysisExcelGenerator {
     const profiles: RespondentProfile[] = [];
 
     this.documents.forEach((doc, index) => {
-      const respondentId = `Respondent ${index + 1}`;
+      const respondentId = `Respondent-0${index + 1}`; // Standardized with hyphen
       const profile: RespondentProfile = {
         respondentId,
       };
@@ -157,7 +157,7 @@ class ContentAnalysisExcelGenerator {
             value = profile.specialty || "Orthodontist";
             break;
           default:
-            value = profile[field.toLowerCase()] || "Not specified";
+            value = (profile as any)[field.toLowerCase()] || "Not specified";
         }
 
         row.push(value);
@@ -448,7 +448,7 @@ class ContentAnalysisExcelGenerator {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response("ok", { status: 200, headers: corsHeaders });
   }
   try {
     const authHeader = req.headers.get("Authorization");
@@ -517,12 +517,11 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch documents: ${documentError.message}`);
     }
 
-    // Fetch analysis results
+    // Fetch analysis results (use the queue-backed table)
     const { data: analysisResult, error: analysisError } = await supabaseService
-      .from("analysis_results")
+      .from("content_analysis_results")
       .select("analysis_data")
       .eq("research_project_id", projectId)
-      .eq("analysis_type", "content")
       .order("updated_at", { ascending: false })
       .limit(1)
       .single();
