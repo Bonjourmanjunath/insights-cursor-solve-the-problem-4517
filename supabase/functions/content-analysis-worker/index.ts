@@ -23,7 +23,14 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // Create clients: service for writes/admin, user client for RLS-scoped reads
+    const authHeader = req.headers.get("Authorization") || "";
     const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
     // Handle test mode
     const body = await req.json().catch(() => ({}));
@@ -129,9 +136,26 @@ Deno.serve(async (req) => {
       .eq("id", jobRow.project_id)
       .single();
 
-    // Try research_documents first, scoped to project and user for consistency with other functions
+    // 1) Try user-scoped reads first (matches Pro Advanced pattern)
     let docs: any[] = [];
     {
+      const { data: u1 } = await supabaseUser
+        .from("research_documents")
+        .select("id, content, name, project_id, user_id")
+        .eq("project_id", jobRow.project_id);
+      if (Array.isArray(u1) && u1.length > 0) docs = u1;
+    }
+
+    if (!docs || docs.length === 0) {
+      const { data: u2 } = await supabaseUser
+        .from("research_files")
+        .select("id, content, name, project_id, user_id")
+        .eq("project_id", jobRow.project_id);
+      if (Array.isArray(u2) && u2.length > 0) docs = u2;
+    }
+
+    // 2) Fallback to service-role reads with (project_id,user_id)
+    if (!docs || docs.length === 0) {
       const { data: d1 } = await supabaseService
         .from("research_documents")
         .select("id, content, name, project_id, user_id")
@@ -140,7 +164,6 @@ Deno.serve(async (req) => {
       if (Array.isArray(d1)) docs = d1;
     }
 
-    // Fallback to research_files if no docs found
     if (!docs || docs.length === 0) {
       const { data: d2 } = await supabaseService
         .from("research_files")
@@ -150,7 +173,7 @@ Deno.serve(async (req) => {
       if (Array.isArray(d2)) docs = d2;
     }
 
-    // FINAL FALLBACK: project-only (handles ownership drift). Service role bypasses RLS, so this is safe.
+    // 3) FINAL FALLBACK: project-only reads via service-role (handles ownership drift)
     if (!docs || docs.length === 0) {
       const { data: d3 } = await supabaseService
         .from("research_documents")
