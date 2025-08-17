@@ -171,13 +171,18 @@ export default function ContentAnalysis() {
       }
 
       // Load result
-      const { data: res } = await (supabase as any)
+      const { data: res, error: resError } = await (supabase as any)
         .from("content_analysis_results")
         .select("*")
         .eq("research_project_id", projectId)
+        .eq("user_id", ca?.job?.user_id || (await (supabase as any).auth.getUser()).data.user?.id)
         .order("updated_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
+
+      if (resError) {
+        throw new Error(`Failed to fetch results: ${resError.message}`);
+      }
 
       const caData = (res as any)?.analysis_data?.content_analysis;
       if (!caData || !Array.isArray(caData?.questions) || caData.questions.length === 0) {

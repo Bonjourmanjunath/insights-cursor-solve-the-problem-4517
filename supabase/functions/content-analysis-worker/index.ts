@@ -129,19 +129,42 @@ Deno.serve(async (req) => {
       .eq("id", jobRow.project_id)
       .single();
 
-    const { data: docs } = await supabaseService
-      .from("research_documents")
-      .select("id, content, name")
-      .eq("project_id", jobRow.project_id);
+    // Try research_documents first, scoped to project and user for consistency with other functions
+    let docs: any[] = [];
+    {
+      const { data: d1 } = await supabaseService
+        .from("research_documents")
+        .select("id, content, name, project_id, user_id")
+        .eq("project_id", jobRow.project_id)
+        .eq("user_id", jobRow.user_id);
+      if (Array.isArray(d1)) docs = d1;
+    }
+
+    // Fallback to research_files if no docs found
+    if (!docs || docs.length === 0) {
+      const { data: d2 } = await supabaseService
+        .from("research_files")
+        .select("id, content, name, project_id, user_id")
+        .eq("project_id", jobRow.project_id)
+        .eq("user_id", jobRow.user_id);
+      if (Array.isArray(d2)) docs = d2;
+    }
+
+    const totalDocs = Array.isArray(docs) ? docs.length : 0;
 
     const transcripts = (docs || [])
       .filter((d: any) => typeof d.content === "string" && d.content.trim().length > 50)
       .map((d: any) => d.content);
 
-    if (!project || transcripts.length === 0) {
+    const validTranscripts = transcripts.length;
+
+    if (!project || validTranscripts === 0) {
       await supabaseService
         .from("content_analysis_jobs")
-        .update({ status: "failed", error_message: "No transcripts or project not found" })
+        .update({ 
+          status: "failed", 
+          error_message: `No transcripts found. Project: ${!!project}, Docs in DB: ${totalDocs}, Valid transcripts: ${validTranscripts}` 
+        })
         .eq("id", jobId);
       return new Response(JSON.stringify({ success: false, error: "No transcripts" }), { headers: corsHeaders });
     }

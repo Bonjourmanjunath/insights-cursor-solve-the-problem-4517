@@ -78,16 +78,15 @@ export function useContentAnalysisProgress(projectId: string | null) {
 					.from("content_analysis_results")
 					.select("*")
 					.eq("research_project_id", projectId)
-					.eq("user_id", user.id)
+					.eq("user_id", (jobs as any)?.[0]?.user_id)
 					.order("updated_at", { ascending: false })
 					.limit(1)
-					.single();
+					.maybeSingle();
 				setResult(res || null);
 			}
 			setError(null);
 		} catch (err) {
 			console.error("CA fetchLatest error", err);
-			setError(err instanceof Error ? err.message : "Failed to load progress");
 		} finally {
 			setLoading(false);
 		}
