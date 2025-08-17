@@ -95,17 +95,37 @@ export function useContentAnalysisProgress(projectId: string | null) {
 
 	const enqueue = async () => {
 		if (!projectId) throw new Error("No projectId");
-		const { data, error } = await supabase.functions.invoke("content-analysis-queue", {
-			body: { project_id: projectId },
-		});
-		if (error) throw error as any;
-		if (!(data as any)?.success) throw new Error((data as any)?.error || "Failed to enqueue");
-		await fetchLatest();
-		return data;
+		try {
+			const { data, error } = await supabase.functions.invoke("content-analysis-queue", {
+				body: { project_id: projectId },
+			});
+			if (error) throw error as any;
+			if (!(data as any)?.success) throw new Error((data as any)?.error || "Failed to enqueue");
+			await fetchLatest();
+			return data;
+		} catch (primaryError: any) {
+			// Auto-bootstrap missing tables/policies if needed, then retry once
+			const message = String(primaryError?.message || primaryError);
+			if (message.toLowerCase().includes("relation") && message.toLowerCase().includes("does not exist")) {
+				try {
+					await supabase.functions.invoke("content-analysis-worker", { body: { action: "create_table" } });
+					const { data: retryData, error: retryError } = await supabase.functions.invoke("content-analysis-queue", {
+						body: { project_id: projectId },
+					});
+					if (retryError) throw retryError as any;
+					if (!(retryData as any)?.success) throw new Error((retryData as any)?.error || "Failed to enqueue (retry)");
+					await fetchLatest();
+					return retryData;
+				} catch (bootstrapErr) {
+					throw bootstrapErr as any;
+				}
+			}
+			throw primaryError;
+		}
 	};
 
 	const triggerWorker = async () => {
-		const { data, error } = await supabase.functions.invoke("content-analysis-worker");
+		const { data, error } = await supabase.functions.invoke("content-analysis-worker", { body: {} });
 		if (error) return { success: false, error } as any;
 		return data as any;
 	};
