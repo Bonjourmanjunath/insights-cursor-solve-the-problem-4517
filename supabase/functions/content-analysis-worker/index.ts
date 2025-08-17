@@ -129,12 +129,25 @@ Deno.serve(async (req) => {
       .eq("id", jobRow.project_id)
       .single();
 
-    const { data: docs } = await supabaseService
+    // Try primary table
+    let allDocs: any[] = [];
+    const { data: docsPrimary } = await supabaseService
       .from("research_documents")
-      .select("id, content, name")
+      .select("id, content, name, file_name")
       .eq("project_id", jobRow.project_id);
 
-    const transcripts = (docs || [])
+    if (Array.isArray(docsPrimary) && docsPrimary.length > 0) {
+      allDocs = docsPrimary as any[];
+    } else {
+      // Fallback table if research_documents is empty
+      const { data: docsFallback } = await supabaseService
+        .from("research_files")
+        .select("id, content, file_name, name")
+        .eq("project_id", jobRow.project_id);
+      allDocs = (docsFallback as any[]) || [];
+    }
+
+    const transcripts = (allDocs || [])
       .filter((d: any) => typeof d.content === "string" && d.content.trim().length > 50)
       .map((d: any) => d.content);
 
@@ -268,27 +281,31 @@ SOURCE:\n${text.slice(0, 8000)}`;
       // Create respondents object with one entry per document/transcript
       const respondents: any = {};
       
-      // Process each transcript/document as a separate respondent (limit to 3 for now)
-      const maxTranscripts = Math.min(transcripts.length, 3);
-      for (let docIndex = 0; docIndex < maxTranscripts; docIndex++) {
+      // Dynamically cap respondents to 30 for scalability
+      const maxTranscripts = Math.min(transcripts.length, 30);
+      const concurrency = 5; // limit concurrent Azure calls per question
+      const tasks: Promise<void>[] = [];
+
+      const processRespondent = async (docIndex: number) => {
         const transcript = transcripts[docIndex];
         const respondentId = `Respondent-0${docIndex + 1}`;
         
-        // Get relevant passages from this specific transcript
+        // Select candidate passages using simple keyword filtering
+        const keywords = (qText || "").toLowerCase().split(/\W+/).filter(Boolean).slice(0, 6);
         const segments = transcript.split(/\n\n+/).filter((s) => s.length > 100);
-        const candidatePassages = segments
-          .filter((s) => s.toLowerCase().includes(qText.toLowerCase().split(" ")[0] || ""))
-          .slice(0, 3); // Limit to 3 passages per respondent
+        const candidatePassages = segments.filter((s) => {
+          const lower = s.toLowerCase();
+          return keywords.some((k) => k && lower.includes(k));
+        }).slice(0, 3);
 
         if (candidatePassages.length === 0) {
-          // No relevant passages found for this respondent
           respondents[respondentId] = {
             profile: { role: "", geography: "", specialty: "", experience: "" },
             quote: "",
             summary: "",
             theme: ""
           };
-          continue;
+          return;
         }
 
         const context = candidatePassages.join("\n\n---\n\n").slice(0, 3000);
@@ -356,6 +373,17 @@ Return JSON ONLY in this format:
             theme: ""
           };
         }
+      };
+
+      for (let docIndex = 0; docIndex < maxTranscripts; docIndex++) {
+        tasks.push(processRespondent(docIndex));
+        if (tasks.length >= concurrency) {
+          await Promise.all(tasks);
+          tasks.length = 0;
+        }
+      }
+      if (tasks.length > 0) {
+        await Promise.all(tasks);
       }
 
       // Add the question with all respondents

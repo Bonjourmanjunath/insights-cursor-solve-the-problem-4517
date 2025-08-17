@@ -115,7 +115,7 @@ class ContentAnalysisExcelGenerator {
   // Generate comprehensive Excel data structure matching your screenshots
   generateExcelData(): any {
     const profiles = this.extractRespondentProfiles();
-    const questions = this.analysisData?.questions || [];
+    const questions = (this.analysisData?.content_analysis?.questions || this.analysisData?.questions) || [];
 
     // Create header row with respondent profiles
     const headerRow = ["", ""];
