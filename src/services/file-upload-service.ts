@@ -386,33 +386,31 @@ export class FileUploadService {
         console.warn("⚠️ Document count update failed:", error);
       }
 
-      // Trigger project ingest for chunking and embedding
-      console.log("🔄 Triggering project ingest for chunking...");
+      // Trigger project ingest queue for chunking and embedding
+      console.log("🔄 Triggering project ingest queue...");
       try {
         const { data: ingestData, error: ingestError } =
-          await supabase.functions.invoke("project-ingest", {
+          await supabase.functions.invoke("project-ingest-queue", {
             body: {
               project_id: projectId,
-              chunkTokens: 1800,
-              overlapTokens: 200,
-              embeddingModel: "text-embedding-3-small",
-              force: false, // Only re-ingest if content changed
             },
           });
 
         if (ingestError) {
-          console.warn("⚠️ Project ingest failed:", ingestError);
+          console.warn("⚠️ Project ingest queue failed:", ingestError);
           // Don't fail the upload, just log the warning
         } else if (ingestData?.success) {
           console.log(
-            "✅ Project ingest completed:",
-            ingestData.total_chunks,
-            "chunks created",
+            "✅ Ingest jobs queued:",
+            ingestData.jobs_created,
+            "jobs created,",
+            "estimated completion:",
+            new Date(ingestData.estimated_completion).toLocaleTimeString(),
           );
         }
       } catch (ingestError) {
-        console.warn("⚠️ Project ingest error:", ingestError);
-        // Don't fail the upload, chunking can be done later
+        console.warn("⚠️ Project ingest queue error:", ingestError);
+        // Don't fail the upload, queueing can be done later
       }
 
       return {

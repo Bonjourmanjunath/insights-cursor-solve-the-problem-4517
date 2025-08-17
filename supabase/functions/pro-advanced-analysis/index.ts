@@ -585,7 +585,30 @@ Deno.serve(async (req) => {
     }
 
     if (!documents || documents.length === 0) {
-      throw new Error("No documents found for analysis");
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "No processed transcripts found for analysis. Please upload documents and complete processing first.",
+          documents_analyzed: 0
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Filter only documents that actually have content
+    const usableDocuments = documents.filter((d: any) =>
+      typeof d.content === "string" && d.content.trim().length > 50
+    );
+
+    if (usableDocuments.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Documents are not processed yet. Please run document processing (chunking/embeddings) and try again.",
+          documents_analyzed: 0
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Get Azure OpenAI credentials

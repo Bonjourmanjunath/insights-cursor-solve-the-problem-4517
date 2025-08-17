@@ -480,6 +480,46 @@ export default function ProAdvancedAnalysis() {
       // Log the documents data structure for debugging
       console.log("Documents data structure:", documentsCheck);
 
+      // Ensure transcripts are processed and available before running analysis
+      const ensureAnalysisReadiness = async () => {
+        // Quick check for any non-empty content
+        const { data: docs, error: docsError } = await supabase
+          .from("research_documents")
+          .select("id, content")
+          .eq("project_id", projectId);
+
+        if (docsError) throw docsError;
+
+        const hasContent = (docs || []).some(
+          (d: any) => typeof d.content === "string" && d.content.trim().length > 50,
+        );
+
+        if (hasContent) return;
+
+        // No content yet → queue ingest and kick workers a few times
+        await supabase.functions.invoke("project-ingest-queue", {
+          body: { project_id: projectId },
+        });
+
+        for (let i = 0; i < 3; i++) {
+          await supabase.functions.invoke("ingest-worker");
+          await new Promise((r) => setTimeout(r, 1500));
+
+          const { data: docs2 } = await supabase
+            .from("research_documents")
+            .select("id, content")
+            .eq("project_id", projectId);
+          const ready = (docs2 || []).some(
+            (d: any) => typeof d.content === "string" && d.content.trim().length > 50,
+          );
+          if (ready) return;
+        }
+
+        throw new Error(
+          "Transcripts are not processed yet. Please process documents first (chunking and embeddings).",
+        );
+      };
+
       // Simulate analysis steps with progress updates
       const steps = [
         { step: "Processing research materials...", progress: 15 },
@@ -497,6 +537,10 @@ export default function ProAdvancedAnalysis() {
         setProgress(progress);
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
+
+      // Ensure transcripts/chunks/embeddings are ready
+      setCurrentStep("Checking transcripts and embeddings...");
+      await ensureAnalysisReadiness();
 
       // Call the advanced analysis function with error handling
       console.log("Calling advanced analysis function...");
@@ -516,7 +560,7 @@ export default function ProAdvancedAnalysis() {
       console.log("Analysis config:", analysisConfig);
 
       const { data, error } = await supabase.functions.invoke(
-        "pro-advanced-analysis",
+        "advanced-analysis",
         {
           body: {
             project_id: projectId,

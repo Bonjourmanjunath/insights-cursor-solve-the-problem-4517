@@ -593,7 +593,7 @@ export default function Projects() {
                           className="w-full bg-white hover:bg-purple-50 border-gray-200 hover:border-purple-300 text-gray-700 hover:text-purple-700 font-medium justify-start"
                           onClick={() =>
                             navigate(
-                              `/dashboard/projects/${project.id}/pro-advanced-analysis`,
+                              `/dashboard/projects/${project.id}/advanced-analysis`,
                             )
                           }
                         >

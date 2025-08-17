@@ -29,6 +29,9 @@ import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import AIChat from "@/components/AIChat";
 import { ErrorHandler, ErrorUtils, ERROR_CODES } from "@/lib/error-handler";
+// @ts-ignore - types will be generated after migration
+import { useIngestProgress } from "@/hooks/useIngestProgress";
+import { IngestProgress } from "@/components/IngestProgress";
 
 interface Project {
   id: string;
@@ -48,6 +51,24 @@ export default function ProjectAnalysis() {
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [processing, setProcessing] = useState(false);
+  
+  // @ts-ignore - types will be generated after migration
+  const ingestProgress = useIngestProgress(projectId || null);
+
+  // Show a one-time toast when processing completes
+  const [ingestNotified, setIngestNotified] = useState(false);
+  useEffect(() => {
+    if (
+      ingestProgress?.progress?.status === "completed" &&
+      !ingestNotified
+    ) {
+      toast({
+        title: "Documents Processed",
+        description: "Chunking and embeddings are ready. You can run analyses now.",
+      });
+      setIngestNotified(true);
+    }
+  }, [ingestProgress?.progress?.status, ingestNotified, toast]);
 
   useEffect(() => {
     if (!projectId) {
@@ -1327,7 +1348,7 @@ export default function ProjectAnalysis() {
           <Button
             variant="outline"
             onClick={() =>
-              navigate(`/dashboard/projects/${projectId}/pro-advanced-analysis`)
+              navigate(`/dashboard/projects/${projectId}/advanced-analysis`)
             }
             className="gap-2"
           >
@@ -1392,6 +1413,29 @@ export default function ProjectAnalysis() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Ingest Progress */}
+      {ingestProgress && !ingestProgress.loading && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Document Processing Status</CardTitle>
+            <CardDescription>
+              Track the progress of document chunking and embedding generation
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <IngestProgress
+              progress={ingestProgress.progress}
+              jobs={ingestProgress.jobs}
+              progressPercentage={ingestProgress.progressPercentage}
+              needsIngest={ingestProgress.needsIngest}
+              onTriggerIngest={ingestProgress.triggerIngest}
+              onProcessJobs={ingestProgress.processJobs}
+              loading={ingestProgress.loading}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Analysis Results */}
       <Tabs defaultValue="fmr-dish" className="space-y-6">

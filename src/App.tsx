@@ -125,7 +125,7 @@ const App = () => (
                 element={<ContentAnalysis />}
               />
               <Route
-                path="projects/:projectId/pro-advanced-analysis"
+                path="projects/:projectId/advanced-analysis"
                 element={<ProAdvancedAnalysis />}
               />
               <Route

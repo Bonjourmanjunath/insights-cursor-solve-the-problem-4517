@@ -378,7 +378,10 @@ Deno.serve(async (req) => {
     }
 
     if (!documents || documents.length === 0) {
-      throw new Error("No documents found for ingestion");
+      return new Response(
+        JSON.stringify({ success: true, message: "No documents found for ingestion", documents: 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Calculate content hash for idempotency

@@ -696,7 +696,7 @@ export default function ContentAnalysis() {
           <Button
             variant="outline"
             onClick={() =>
-              navigate(`/dashboard/projects/${projectId}/pro-advanced-analysis`)
+              navigate(`/dashboard/projects/${projectId}/advanced-analysis`)
             }
             className="gap-2"
           >
