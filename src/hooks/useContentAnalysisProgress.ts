@@ -87,7 +87,14 @@ export function useContentAnalysisProgress(projectId: string | null) {
 		console.log("[CA] Starting enqueue for projectId:", projectId);
 		
 		try {
-			const { data, error } = await supabase.functions.invoke("content-analysis-queue", {
+			// EXTREME DEBUG: Check the string before passing
+			const functionName = "content-analysis-queue";
+			console.log("[CA-DEBUG] Function name:", functionName);
+			console.log("[CA-DEBUG] Function name length:", functionName.length);
+			console.log("[CA-DEBUG] Character codes:", functionName.split('').map(c => c.charCodeAt(0)));
+			console.log("[CA-DEBUG] Hex:", functionName.split('').map(c => '0x' + c.charCodeAt(0).toString(16)));
+			
+			const { data, error } = await supabase.functions.invoke(functionName, {
 				body: { project_id: projectId },
 			});
 			

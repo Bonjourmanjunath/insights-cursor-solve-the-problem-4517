@@ -19,8 +19,32 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 // Temporary workaround for the em-dash issue
 const originalInvoke = supabase.functions.invoke.bind(supabase.functions);
 supabase.functions.invoke = async (functionName: string, options?: any) => {
-  // Force ASCII hyphens in function names
-  const safeFunctionName = functionName.replace(/[\u2010-\u2015\u2212]/g, '-');
-  console.log(`[Supabase] Invoking function: "${safeFunctionName}" (original: "${functionName}")`);
+  console.log('[SUPABASE-DEBUG] === FUNCTION INVOKE INTERCEPTED ===');
+  console.log('[SUPABASE-DEBUG] Original input:', functionName);
+  console.log('[SUPABASE-DEBUG] Type:', typeof functionName);
+  console.log('[SUPABASE-DEBUG] Length:', functionName.length);
+  
+  // Check each character
+  for (let i = 0; i < functionName.length; i++) {
+    const char = functionName[i];
+    const code = char.charCodeAt(0);
+    console.log(`[SUPABASE-DEBUG] Character ${i}: "${char}" = ${code} (0x${code.toString(16)})`);
+  }
+  
+  // Force ASCII hyphens in function names - includes ALL dash types
+  const safeFunctionName = functionName
+    .replace(/[\u2010-\u2015]/g, '-')  // Various dashes
+    .replace(/[\u2212]/g, '-')         // Minus sign
+    .replace(/[\u2013-\u2014]/g, '-')  // En-dash and em-dash
+    .replace(/[—–−]/g, '-')            // Direct characters
+    .replace(/[\u00AD]/g, '-')         // Soft hyphen
+    .replace(/[\uFE58]/g, '-')         // Small em-dash
+    .replace(/[\uFE63]/g, '-')         // Small hyphen-minus
+    .replace(/[\uFF0D]/g, '-');        // Fullwidth hyphen-minus
+  
+  console.log('[SUPABASE-DEBUG] Safe function name:', safeFunctionName);
+  console.log('[SUPABASE-DEBUG] Safe name length:', safeFunctionName.length);
+  console.log('[SUPABASE-DEBUG] === END DEBUG ===');
+  
   return originalInvoke(safeFunctionName, options);
 };
