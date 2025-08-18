@@ -87,6 +87,7 @@ export default function ContentAnalysis() {
     totalBatches: number;
   } | null>(null);
   const [ranOnce, setRanOnce] = useState(false);
+  const [isFixingTable, setIsFixingTable] = useState(false);
 
   // Remove the problematic redirect effect that was causing navigation issues
 
@@ -149,6 +150,47 @@ export default function ContentAnalysis() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fixContentAnalysisTable = async () => {
+    try {
+      setIsFixingTable(true);
+      
+      // Call the worker with create_table action
+      const { data, error } = await supabase.functions.invoke(
+        "content-analysis-worker",
+        {
+          body: { action: "create_table" },
+        },
+      );
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Table Fix Attempted",
+        description: "Database table creation attempted. Try running analysis now!",
+      });
+      
+      // Also try to debug what tables exist
+      const { data: debugData } = await supabase.functions.invoke(
+        "content-analysis-worker",
+        {
+          body: { action: "debug_jobs" },
+        },
+      );
+      
+      console.log("Debug jobs response:", debugData);
+      
+    } catch (error) {
+      console.error("Fix table error:", error);
+      toast({
+        title: "Fix Failed",
+        description: "Could not create table. Check console for details.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFixingTable(false);
     }
   };
 
@@ -331,19 +373,38 @@ export default function ContentAnalysis() {
             Run content analysis to generate the guide-aligned matrix
             (independent of project type)
           </p>
-          <Button onClick={runContentAnalysis} disabled={analyzing}>
-            {analyzing ? (
-              <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              <>
-                <Play className="h-4 w-4 mr-2" />
-                Run Content Analysis
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={runContentAnalysis} disabled={analyzing}>
+              {analyzing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Run Content Analysis
+                </>
+              )}
+            </Button>
+            <Button 
+              onClick={fixContentAnalysisTable} 
+              disabled={isFixingTable}
+              variant="outline"
+              className="text-orange-600 border-orange-600 hover:bg-orange-50"
+            >
+              {isFixingTable ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Fixing...
+                </>
+              ) : (
+                <>
+                  🔧 Fix Database Table
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       );
     }
