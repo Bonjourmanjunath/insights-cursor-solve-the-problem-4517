@@ -517,9 +517,9 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch documents: ${documentError.message}`);
     }
 
-    // Fetch analysis results (use the queue-backed table)
+    // Fetch analysis results from the analysis_results table
     const { data: analysisResult, error: analysisError } = await supabaseService
-      .from("content_analysis_results")
+      .from("analysis_results")
       .select("analysis_data")
       .eq("research_project_id", projectId)
       .order("updated_at", { ascending: false })

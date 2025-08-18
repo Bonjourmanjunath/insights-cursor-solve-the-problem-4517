@@ -610,7 +610,7 @@ Deno.serve(async (req) => {
 
     // Store content analysis result in database
     const { data: existingAnalysis, error: checkError } = await supabaseService
-      .from("content_analysis_results")
+      .from("analysis_results")
       .select("id")
       .eq("research_project_id", project_id)
       .eq("user_id", user.id)
@@ -620,7 +620,7 @@ Deno.serve(async (req) => {
     if (existingAnalysis) {
       // Update existing analysis
       const { data, error: updateError } = await supabaseService
-        .from("content_analysis_results")
+        .from("analysis_results")
         .update({
           analysis_data: analysisResult,
           updated_at: new Date().toISOString(),
@@ -641,7 +641,7 @@ Deno.serve(async (req) => {
     } else {
       // Insert new analysis
       const { data, error: insertError } = await supabaseService
-        .from("content_analysis_results")
+        .from("analysis_results")
         .insert({
           research_project_id: project_id,
           user_id: user.id,
