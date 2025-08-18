@@ -28,14 +28,22 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { action } = body;
 
+    // Log incoming request for debugging (remove in production)
+    console.log("Guide-aware worker received request:", { action, hasBody: !!body });
+
     // Prepare Azure config
     const azureApiKey = Deno.env.get("FMR_AZURE_OPENAI_API_KEY");
     const azureEndpoint = Deno.env.get("FMR_AZURE_OPENAI_ENDPOINT");
     const azureDeployment = Deno.env.get("FMR_AZURE_OPENAI_DEPLOYMENT") || "gpt-4o-mini";
     const azureVersion = Deno.env.get("FMR_AZURE_OPENAI_VERSION") || "2024-02-15-preview";
     
+    // Better error message for missing credentials
     if (!azureApiKey || !azureEndpoint) {
-      throw new Error("Azure OpenAI credentials not configured");
+      console.error("Missing Azure credentials:", { 
+        hasApiKey: !!azureApiKey, 
+        hasEndpoint: !!azureEndpoint 
+      });
+      throw new Error("Azure OpenAI credentials not configured. Please set FMR_AZURE_OPENAI_API_KEY and FMR_AZURE_OPENAI_ENDPOINT environment variables.");
     }
 
     const qaApiUrl = `${azureEndpoint}/openai/deployments/${azureDeployment}/chat/completions?api-version=${azureVersion}`;
@@ -119,17 +127,26 @@ ${guideText.slice(0, 8000)}`;
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`Azure API error: ${response.status}`);
+      const errorBody = await response.text();
+      console.error("Azure API error:", { status: response.status, body: errorBody });
+      throw new Error(`Azure API error: ${response.status} - ${errorBody}`);
     }
 
     const result = await response.json();
     const content = result.choices?.[0]?.message?.content?.trim();
     
     if (!content) {
+      console.error("No content in Azure response:", result);
       throw new Error("No content received from Azure API");
     }
 
-    const parsed = JSON.parse(content);
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      console.error("Failed to parse Azure response as JSON:", content);
+      throw new Error("Azure returned invalid JSON: " + parseError.message);
+    }
     
     return new Response(JSON.stringify({ 
       success: true, 
