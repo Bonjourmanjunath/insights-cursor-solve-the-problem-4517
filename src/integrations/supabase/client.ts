@@ -15,3 +15,12 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+// Temporary workaround for the em-dash issue
+const originalInvoke = supabase.functions.invoke.bind(supabase.functions);
+supabase.functions.invoke = async (functionName: string, options?: any) => {
+  // Force ASCII hyphens in function names
+  const safeFunctionName = functionName.replace(/[\u2010-\u2015\u2212]/g, '-');
+  console.log(`[Supabase] Invoking function: "${safeFunctionName}" (original: "${functionName}")`);
+  return originalInvoke(safeFunctionName, options);
+};

@@ -27,6 +27,7 @@ import React, { Suspense } from "react";
 
 import ContentAnalysis from "./pages/ContentAnalysis";
 import GuideAwareContentAnalysis from "./components/GuideAwareContentAnalysis";
+import TestEmDash from "./pages/TestEmDash";
 
 const ProAdvancedAnalysis = React.lazy(
   () => import("@/pages/ProAdvancedAnalysis"),
@@ -138,6 +139,7 @@ const App = () => (
                 element={<ProjectChat />}
               />
               <Route path="chat" element={<Chat />} />
+              <Route path="test-em-dash" element={<TestEmDash />} />
             </Route>
 
             {/* Tempo route before catch-all */}

@@ -84,13 +84,43 @@ export function useContentAnalysisProgress(projectId: string | null) {
 
 	const enqueue = async () => {
 		if (!projectId) throw new Error("No projectId");
-		const { data, error } = await supabase.functions.invoke("content-analysis-queue", {
-			body: { project_id: projectId },
-		});
-		if (error) throw error as any;
-		if (!(data as any)?.success) throw new Error((data as any)?.error || "Failed to enqueue");
-		await fetchLatest();
-		return data;
+		console.log("[CA] Starting enqueue for projectId:", projectId);
+		
+		try {
+			const { data, error } = await supabase.functions.invoke("content-analysis-queue", {
+				body: { project_id: projectId },
+			});
+			
+			if (error) {
+				console.error("[CA] Queue error:", error);
+				// Handle ReadableStream errors
+				let errorMessage = "Failed to enqueue content analysis job";
+				if (error.message) {
+					errorMessage = error.message;
+				} else if (error.raw && typeof error.raw.text === 'function') {
+					try {
+						const text = await error.raw.text();
+						const parsed = JSON.parse(text);
+						errorMessage = parsed.error || parsed.message || errorMessage;
+					} catch (e) {
+						console.error("[CA] Failed to parse error response:", e);
+					}
+				}
+				throw new Error(errorMessage);
+			}
+			
+			if (!data?.success) {
+				console.error("[CA] Queue failed:", data?.error || "Unknown error");
+				throw new Error(data?.error || "Failed to enqueue content analysis job");
+			}
+			
+			console.log("[CA] Queue success:", data);
+			await fetchLatest();
+			return data;
+		} catch (err) {
+			console.error("[CA] Enqueue failed:", err);
+			throw err;
+		}
 	};
 
 	const triggerWorker = async () => {
