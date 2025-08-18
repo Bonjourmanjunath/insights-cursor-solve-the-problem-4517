@@ -27,6 +27,7 @@ import React, { Suspense } from "react";
 
 import ContentAnalysis from "./pages/ContentAnalysis";
 import GuideAwareContentAnalysis from "./components/GuideAwareContentAnalysis";
+import SimpleGuideParser from "./pages/SimpleGuideParser";
 
 const ProAdvancedAnalysis = React.lazy(
   () => import("@/pages/ProAdvancedAnalysis"),
@@ -128,6 +129,10 @@ const App = () => (
               <Route
                 path="guide-aware-test"
                 element={<GuideAwareContentAnalysis />}
+              />
+              <Route
+                path="simple-guide-parser"
+                element={<SimpleGuideParser />}
               />
               <Route
                 path="projects/:projectId/advanced-analysis"
