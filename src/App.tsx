@@ -29,6 +29,7 @@ import ContentAnalysis from "./pages/ContentAnalysis";
 import GuideAwareContentAnalysis from "./components/GuideAwareContentAnalysis";
 import TestEmDash from "./pages/TestEmDash";
 import TestDirectCall from "./pages/TestDirectCall";
+import SimpleContentAnalysis from "./pages/SimpleContentAnalysis";
 
 const ProAdvancedAnalysis = React.lazy(
   () => import("@/pages/ProAdvancedAnalysis"),
@@ -126,6 +127,10 @@ const App = () => (
               <Route
                 path="projects/:projectId/analysis/content"
                 element={<ContentAnalysis />}
+              />
+              <Route
+                path="projects/:projectId/simple-analysis"
+                element={<SimpleContentAnalysis />}
               />
               <Route
                 path="guide-aware-test"
