@@ -1037,7 +1037,7 @@ export default function ProAdvancedAnalysis() {
                   </h3>
                   <p className="text-muted-foreground mb-4">
                     Your basic FMR analysis has been completed. Switch to the
-                    main Project Analysis page to view detailed results.
+                    main Basic Analysis page to view detailed results.
                   </p>
                   <Button
                     onClick={() =>

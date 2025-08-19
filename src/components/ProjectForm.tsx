@@ -180,7 +180,8 @@ export default function ProjectForm({
   };
 
   const parseDiscussionGuide = async () => {
-    if (!formData.guide_context.trim()) {
+    const text = (formData.guide_context ?? '').trim();
+    if (!text) {
       toast({
         title: "No Guide Content",
         description: "Please add some discussion guide content first.",
@@ -191,34 +192,42 @@ export default function ProjectForm({
 
     setParsingGuide(true);
     try {
+      console.log("Calling guide-parser with text length:", text.length);
+      
       const { data, error } = await supabase.functions.invoke("guide-parser", {
-        body: { text: formData.guide_context },
+        body: { text }, // Must be "text" property
       });
 
-      if (error) throw error;
-
-      if (data?.ok && data?.guide) {
-        // Convert the function response to match our ParsedGuide interface
-        const parsedGuide: ParsedGuide = {
-          sections: data.guide.sections,
-          coverage: data.stats.coverage * 100, // Convert to percentage
-          totalQuestions: data.stats.questions,
-          rawQL: data.stats.rawQuestions
-        };
-        setParsedGuide(parsedGuide);
-        
-        // CRITICAL FIX: Save the structured guide data back to formData.guide_context
-        // This ensures the content analysis function can access the parsed questions
-        const structuredGuideData = JSON.stringify(data.guide, null, 2);
-        updateFormData("guide_context", structuredGuideData);
-        
-        toast({
-          title: "Guide Parsed Successfully!",
-          description: `${data.stats.questions} questions found with ${(data.stats.coverage * 100).toFixed(1)}% coverage - Ready for Content Analysis!`,
-        });
-      } else {
-        throw new Error(data?.error || "Failed to parse guide");
+      // Surface server errors with context
+      if (error) {
+        throw new Error(`guide-parser failed: ${error.message ?? JSON.stringify(error)}`);
       }
+
+      console.log("Guide parser response:", data);
+
+      // Check for expected structure
+      if (!data?.guide?.sections) {
+        throw new Error(`guide-parser returned unexpected payload: ${JSON.stringify(data)}`);
+      }
+
+      // Convert the function response to match our ParsedGuide interface
+      const parsedGuide: ParsedGuide = {
+        sections: data.guide.sections,
+        coverage: data.metrics?.coverage ? data.metrics.coverage * 100 : 0, // Convert to percentage
+        totalQuestions: data.metrics?.extractedQuestions || 0,
+        rawQL: data.metrics?.candidateQuestionLines || 0
+      };
+      setParsedGuide(parsedGuide);
+      
+      // CRITICAL FIX: Save the structured guide data back to formData.guide_context
+      // This ensures the content analysis function can access the parsed questions
+      const structuredGuideData = JSON.stringify(data.guide, null, 2);
+      updateFormData("guide_context", structuredGuideData);
+      
+      toast({
+        title: "Guide Parsed Successfully!",
+        description: `${data.metrics?.extractedQuestions || 0} questions found with ${((data.metrics?.coverage || 0) * 100).toFixed(1)}% coverage - Ready for Content Analysis!`,
+      });
     } catch (error) {
       console.error("Guide parsing error:", error);
       toast({
@@ -622,6 +631,67 @@ export default function ProjectForm({
                   <Progress value={parsedGuide.coverage} className="mt-2" />
                 </AlertDescription>
               </Alert>
+            )}
+
+            {/* TEMPORARY: Detailed Parsed Data Structure */}
+            {parsedGuide && (
+              <div className="mt-4 p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-blue-800">🔍 TEMPORARY: Parsed Data Structure</h4>
+                  <Badge variant="outline" className="text-blue-600">Debug View</Badge>
+                </div>
+                
+                <div className="space-y-3">
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="bg-white p-2 rounded border">
+                      <span className="font-medium text-gray-700">Total Sections:</span> {parsedGuide.sections.length}
+                    </div>
+                    <div className="bg-white p-2 rounded border">
+                      <span className="font-medium text-gray-700">Total Questions:</span> {parsedGuide.totalQuestions}
+                    </div>
+                  </div>
+
+                  {/* Detailed Sections */}
+                  <div className="bg-white p-3 rounded border max-h-60 overflow-y-auto">
+                    <h5 className="font-medium text-gray-700 mb-2">📋 Parsed Sections:</h5>
+                    {parsedGuide.sections.map((section, sectionIndex) => (
+                      <div key={sectionIndex} className="mb-3 p-2 bg-gray-50 rounded">
+                        <div className="font-medium text-blue-600 mb-1">
+                          Section {sectionIndex + 1}: {section.title}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Questions: {section.questions?.length || 0}
+                        </div>
+                        {section.questions && section.questions.length > 0 && (
+                          <div className="mt-1 space-y-1">
+                            {section.questions.slice(0, 3).map((question, qIndex) => (
+                              <div key={qIndex} className="text-xs bg-white p-1 rounded border-l-2 border-blue-300">
+                                {qIndex + 1}. {question.text}
+                              </div>
+                            ))}
+                            {section.questions.length > 3 && (
+                              <div className="text-xs text-gray-500 italic">
+                                ... and {section.questions.length - 3} more questions
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Raw JSON Structure */}
+                  <details className="bg-white p-3 rounded border">
+                    <summary className="font-medium text-gray-700 cursor-pointer">
+                      🔧 Raw JSON Structure (Click to expand)
+                    </summary>
+                    <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-x-auto">
+                      {JSON.stringify(parsedGuide, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              </div>
             )}
           </div>
         </div>

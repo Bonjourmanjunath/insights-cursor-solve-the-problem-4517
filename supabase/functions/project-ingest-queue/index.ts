@@ -79,9 +79,9 @@ Deno.serve(async (req) => {
 
     if (!documents || documents.length === 0) {
       return json(req, { 
-        success: true, 
-        message: "No documents found to process", 
-        jobs_created: 0 
+          success: true, 
+          message: "No documents found to process", 
+          jobs_created: 0 
       });
     }
 
@@ -149,20 +149,20 @@ Deno.serve(async (req) => {
       .eq("project_id", project_id);
 
     return json(req, {
-      success: true,
-      message: "Ingestion jobs queued successfully",
-      project_id: project_id,
-      jobs_created: jobsCreated,
-      total_documents: documents.length,
-      estimated_completion: estimatedCompletion,
-      metadata_id: metadata?.id,
+        success: true,
+        message: "Ingestion jobs queued successfully",
+        project_id: project_id,
+        jobs_created: jobsCreated,
+        total_documents: documents.length,
+        estimated_completion: estimatedCompletion,
+        metadata_id: metadata?.id,
     });
   } catch (err: any) {
     console.error("Error in project-ingest-queue:", err);
     
     return json(req, {
-      success: false,
-      error: String(err?.message || err || "Internal server error"),
+        success: false,
+        error: String(err?.message || err || "Internal server error"),
     }, { status: 500 });
   }
 }); 

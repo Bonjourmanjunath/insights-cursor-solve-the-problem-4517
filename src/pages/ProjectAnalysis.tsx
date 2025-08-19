@@ -894,37 +894,97 @@ export default function ProjectAnalysis() {
     );
   };
 
+  const safeJSONParse = (jsonString: string) => {
+    try {
+      // Clean the JSON string by removing problematic control characters
+      const cleaned = jsonString
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+        .replace(/\n/g, '\\n') // Escape newlines
+        .replace(/\r/g, '\\r') // Escape carriage returns
+        .replace(/\t/g, '\\t'); // Escape tabs
+      
+      return JSON.parse(cleaned);
+    } catch (e) {
+      console.error('Safe JSON parse failed:', e);
+      return null;
+    }
+  };
+
   const renderFMRDish = () => {
     if (!analysis) return renderNoAnalysis();
+    
+    // Try to get data from the parsed JSON string in summary.content
+    let fmrData = analysis.fmr_dish;
+    
+    // If fmr_dish is empty, try to parse from summary.content
+    if (!fmrData?.table || fmrData.table.length === 0) {
+      try {
+        if (analysis.summary?.content) {
+          console.log("=== PARSING SUMMARY CONTENT FOR FMR DISH ===");
+          console.log("Raw summary content:", analysis.summary.content);
+          const parsedContent = safeJSONParse(analysis.summary.content);
+          console.log("Parsed content:", parsedContent);
+          if (parsedContent) {
+            console.log("Parsed fmr_dish:", parsedContent.fmr_dish);
+            console.log("Parsed fmr_dish.questions:", parsedContent.fmr_dish?.questions);
+            console.log("Parsed fmr_dish.questions length:", parsedContent.fmr_dish?.questions?.length);
+            fmrData = parsedContent.fmr_dish;
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing summary content for FMR Dish:', e);
+      }
+    }
 
-    const fmrData = analysis.fmr_dish;
+    // Additional fallback: check if data is stored directly in analysis
+    if (!fmrData?.table || fmrData.table.length === 0) {
+      console.log("=== CHECKING DIRECT ANALYSIS DATA FOR FMR DISH ===");
+      console.log("Full analysis object:", analysis);
+      // Try to find questions in the analysis object directly
+      if (analysis.questions && Array.isArray(analysis.questions)) {
+        fmrData = { questions: analysis.questions };
+      }
+    }
 
-    return (
-      <div className="space-y-6">
-        <div className="mb-6">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center">
-              <BarChart3 className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h4 className="text-lg font-semibold">Basic Analysis</h4>
-              <p className="text-muted-foreground text-sm">
-                Matrix view organized by question categories and respondents
-              </p>
-            </div>
+    // Debug logging
+    console.log("=== FMR DISH RENDER DEBUG ===");
+    console.log("fmrData:", fmrData);
+    console.log("fmrData.table:", fmrData?.table);
+    console.log("fmrData.table length:", fmrData?.table?.length);
+    console.log("fmrData.questions:", fmrData?.questions);
+    console.log("fmrData.questions length:", fmrData?.questions?.length);
+
+    // Check for either table or questions data
+    const hasTableData = fmrData?.table && Array.isArray(fmrData.table) && fmrData.table.length > 0;
+    const hasQuestionsData = fmrData?.questions && Array.isArray(fmrData.questions) && fmrData.questions.length > 0;
+
+    if (!hasTableData && !hasQuestionsData) {
+      return (
+        <div className="space-y-4">
+          <div className="text-center py-8">
+            <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">No FMR Dish Data Available</h3>
+            <p className="text-muted-foreground">
+              FMR Dish analysis data is not available for this project.
+            </p>
           </div>
         </div>
+      );
+    }
+    
+    // Use questions data if available, otherwise use table data
+    const questionsToRender = hasQuestionsData ? fmrData.questions : fmrData.table;
 
-        {fmrData?.questions &&
-        Array.isArray(fmrData.questions) &&
-        fmrData.questions.length > 0 ? (
+    return (
+      <div className="space-y-4">
+        {questionsToRender && Array.isArray(questionsToRender) && questionsToRender.length > 0 ? (
           <div className="w-full">
             <ScrollArea className="h-[600px] w-full">
               <div className="overflow-x-auto">
                 {/* Get all unique respondents */}
                 {(() => {
                   const allRespondents = new Set<string>();
-                  fmrData.questions.forEach((q: any) => {
+                  questionsToRender.forEach((q: any) => {
                     if (q.respondents) {
                       Object.keys(q.respondents).forEach((resp) =>
                         allRespondents.add(resp),
@@ -955,7 +1015,7 @@ export default function ProjectAnalysis() {
                       </div>
 
                       {/* Question rows */}
-                      {fmrData.questions.map(
+                      {questionsToRender.map(
                         (questionData: any, qIndex: number) => (
                           <div
                             key={qIndex}
@@ -1048,13 +1108,58 @@ export default function ProjectAnalysis() {
 
   const renderModeAnalysis = () => {
     if (!analysis) return renderNoAnalysis();
+    
+    // Try to get data from the parsed JSON string in summary.content
+    let modeData = analysis.mode_analysis;
+    
+    // If mode_analysis is empty, try to parse from summary.content
+    if (!modeData?.table || modeData.table.length === 0) {
+      try {
+        if (analysis.summary?.content) {
+          console.log("=== PARSING SUMMARY CONTENT FOR MODE ANALYSIS ===");
+          console.log("Raw summary content:", analysis.summary.content);
+          const parsedContent = safeJSONParse(analysis.summary.content);
+          console.log("Parsed content:", parsedContent);
+          if (parsedContent) {
+            console.log("Parsed mode_analysis:", parsedContent.mode_analysis);
+            modeData = parsedContent.mode_analysis;
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing summary content for Mode Analysis:', e);
+      }
+    }
 
-    const modeData = analysis.mode_analysis;
+    // Debug logging
+    console.log("=== MODE ANALYSIS RENDER DEBUG ===");
+    console.log("modeData:", modeData);
+    console.log("modeData.table:", modeData?.table);
+    console.log("modeData.content:", modeData?.content);
+
+    // Check for either table or questions data
+    const hasTableData = modeData?.table && Array.isArray(modeData.table) && modeData.table.length > 0;
+    const hasQuestionsData = modeData?.questions && Array.isArray(modeData.questions) && modeData.questions.length > 0;
+
+    if (!hasTableData && !hasQuestionsData) {
+      return (
+        <div className="space-y-4">
+          <div className="text-center py-8">
+            <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">No Mode Analysis Data Available</h3>
+            <p className="text-muted-foreground">
+              Mode analysis data is not available for this project.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    
+    // Use questions data if available, otherwise use table data
+    const questionsToRender = hasQuestionsData ? modeData.questions : modeData.table;
+
     return (
       <div className="space-y-4">
-        {modeData?.table &&
-        Array.isArray(modeData.table) &&
-        modeData.table.length > 0 ? (
+        {questionsToRender && Array.isArray(questionsToRender) && questionsToRender.length > 0 ? (
           <>
             <div className="mb-4">
               <h4 className="text-lg font-semibold mb-2">
@@ -1115,13 +1220,58 @@ export default function ProjectAnalysis() {
 
   const renderStrategicThemes = () => {
     if (!analysis) return renderNoAnalysis();
+    
+    // Try to get data from the parsed JSON string in summary.content
+    let themesData = analysis.strategic_themes;
+    
+    // If strategic_themes is empty, try to parse from summary.content
+    if (!themesData?.table || themesData.table.length === 0) {
+      try {
+        if (analysis.summary?.content) {
+          console.log("=== PARSING SUMMARY CONTENT FOR STRATEGIC THEMES ===");
+          console.log("Raw summary content:", analysis.summary.content);
+          const parsedContent = safeJSONParse(analysis.summary.content);
+          console.log("Parsed content:", parsedContent);
+          if (parsedContent) {
+            console.log("Parsed strategic_themes:", parsedContent.strategic_themes);
+            themesData = parsedContent.strategic_themes;
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing summary content for Strategic Themes:', e);
+      }
+    }
 
-    const themesData = analysis.strategic_themes;
+    // Debug logging
+    console.log("=== STRATEGIC THEMES RENDER DEBUG ===");
+    console.log("themesData:", themesData);
+    console.log("themesData.table:", themesData?.table);
+    console.log("themesData.content:", themesData?.content);
+
+    // Check for either table or questions data
+    const hasTableData = themesData?.table && Array.isArray(themesData.table) && themesData.table.length > 0;
+    const hasQuestionsData = themesData?.questions && Array.isArray(themesData.questions) && themesData.questions.length > 0;
+
+    if (!hasTableData && !hasQuestionsData) {
+      return (
+        <div className="space-y-4">
+          <div className="text-center py-8">
+            <BarChart3 className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">No Strategic Themes Data Available</h3>
+            <p className="text-muted-foreground">
+              Strategic themes data is not available for this project.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    
+    // Use questions data if available, otherwise use table data
+    const questionsToRender = hasQuestionsData ? themesData.questions : themesData.table;
+
     return (
       <div className="space-y-4">
-        {themesData?.table &&
-        Array.isArray(themesData.table) &&
-        themesData.table.length > 0 ? (
+        {questionsToRender && Array.isArray(questionsToRender) && questionsToRender.length > 0 ? (
           <>
             <div className="mb-4">
               <h4 className="text-lg font-semibold mb-2">
@@ -1147,7 +1297,7 @@ export default function ProjectAnalysis() {
                   </tr>
                 </thead>
                 <tbody>
-                  {themesData.table.map((row: any, index: number) => (
+                  {questionsToRender.map((row: any, index: number) => (
                     <tr key={index} className="hover:bg-muted/50">
                       <td className="border border-border p-3 text-sm">
                         {row.theme || "-"}
@@ -1181,53 +1331,58 @@ export default function ProjectAnalysis() {
   };
 
   const renderSummary = () => {
+    console.log("=== RENDER SUMMARY FUNCTION CALLED ===", new Date().toISOString());
+    
     if (!analysis) return renderNoAnalysis();
 
-    const summaryData = analysis.summary;
+    // Debug logging
+    console.log("=== SUMMARY RENDER DEBUG ===");
+    console.log("analysis:", analysis);
+    console.log("analysis type:", typeof analysis);
+    
+    // Handle different data structures
+    let summaryContent = null;
+    
+    if (analysis.summary?.content) {
+      // If there's a dedicated summary section
+      summaryContent = analysis.summary.content;
+    } else if (analysis.fmr_dish?.description) {
+      // Use the FMR dish description as summary
+      summaryContent = analysis.fmr_dish.description;
+    } else if (typeof analysis === "string") {
+      // If analysis is a string
+      summaryContent = analysis;
+    } else if (analysis.fmr_dish?.questions && Array.isArray(analysis.fmr_dish.questions)) {
+      // Generate summary from questions data
+      const questions = analysis.fmr_dish.questions;
+      const totalQuestions = questions.length;
+      const totalRespondents = questions.reduce((acc, q) => {
+        return acc + (q.respondents ? Object.keys(q.respondents).length : 0);
+      }, 0);
+      
+      summaryContent = `Analysis completed with ${totalQuestions} questions and ${totalRespondents} total respondent entries. The analysis covers various aspects of the research topic with detailed insights from multiple perspectives.`;
+    } else {
+      // Fallback: show a message about the data structure
+      summaryContent = "Summary data is available but in a different format. Please check the other tabs for detailed analysis results.";
+    }
+    
     return (
       <div className="space-y-4">
-        {summaryData?.content ? (
-          <>
-            <div className="mb-4">
-              <h4 className="text-lg font-semibold mb-2">
-                📝 Executive Summary
-              </h4>
-              <p className="text-muted-foreground text-sm">
-                Condensed insights and recommendations
-              </p>
-            </div>
-            <div className="prose prose-sm max-w-none">
-              <div className="bg-muted/30 p-4 rounded-lg">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {summaryData.content}
-                </p>
-              </div>
-            </div>
-          </>
-        ) : analysis && typeof analysis === "string" ? (
-          <>
-            <div className="mb-4">
-              <h4 className="text-lg font-semibold mb-2">
-                📝 Executive Summary
-              </h4>
-              <p className="text-muted-foreground text-sm">
-                Condensed insights and recommendations
-              </p>
-            </div>
-            <div className="prose prose-sm max-w-none">
-              <div className="bg-muted/30 p-4 rounded-lg">
-                <pre className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {analysis}
-                </pre>
-              </div>
-            </div>
-          </>
-        ) : (
-          <p className="text-muted-foreground">
-            Executive summary not available
+        <div className="mb-4">
+          <h4 className="text-lg font-semibold mb-2">
+            📝 Executive Summary (Updated: {new Date().toLocaleTimeString()})
+          </h4>
+          <p className="text-muted-foreground text-sm">
+            Condensed insights and recommendations
           </p>
-        )}
-        {renderActionButtons()}
+        </div>
+        <div className="prose prose-sm max-w-none">
+          <div className="bg-muted/30 p-4 rounded-lg">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+              {summaryContent}
+            </p>
+          </div>
+        </div>
       </div>
     );
   };

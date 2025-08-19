@@ -42,7 +42,7 @@ serve(async (req) => {
 
     // 1) Claim the job (avoid PGRST116 by checking rows_affected)
     const { data: upd, error: updErr } = await supabase
-      .from('content_analysis_jobs')
+            .from('content_analysis_jobs')
       .update({ status: 'running', started_at: new Date().toISOString() })
       .eq('id', job_id)
       .in('status', ['queued', 'running'])       // allow resume
@@ -57,8 +57,8 @@ serve(async (req) => {
       .from('research_projects')
       .select('guide_context')
       .eq('id', upd.project_id)
-      .single();
-
+        .single();
+      
     if (projectErr) throw projectErr;
     if (!project?.guide_context) {
       throw new Error('No guide context found for project');

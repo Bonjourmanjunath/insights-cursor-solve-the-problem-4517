@@ -34,7 +34,6 @@ interface Project {
   stakeholder_type?: string;
   country?: string;
   therapy_area?: string;
-  guide_context?: string;
 }
 
 interface ContentAnalysisData {
@@ -185,117 +184,57 @@ export default function ContentAnalysis() {
       console.log("Session exists:", !!session);
       console.log("Project ID:", projectId);
 
-      // Use the queue system for content analysis
-      console.log("Creating content analysis job...");
-      const { data: queueResponse, error: queueError } =
-        await supabase.functions.invoke("content-analysis-queue", {
+      // Use supabase-js for edge function invocation with correct function name
+      const { data: response, error: functionError } =
+        await supabase.functions.invoke("content-analysis", {
           body: {
             project_id: projectId,
           },
         });
 
-      if (queueError) {
+      if (functionError) {
         throw new Error(
-          `Queue function error: ${queueError.message}`,
+          `Content analysis function error: ${functionError.message}`,
         );
       }
 
-      if (!queueResponse?.ok) {
+      const data = response;
+
+      console.log("Content analysis response:", data);
+
+      if (!data?.success) {
+        throw new Error(data?.error || "Content analysis failed");
+      }
+
+      console.log("=== CONTENT ANALYSIS RESPONSE DEBUG ===");
+      console.log("Full response data:", JSON.stringify(data, null, 2));
+      console.log("Has contentAnalysis:", !!data?.contentAnalysis);
+      console.log(
+        "Has contentAnalysis.questions:",
+        !!data?.contentAnalysis?.questions,
+      );
+      console.log(
+        "Questions length:",
+        data?.contentAnalysis?.questions?.length || 0,
+      );
+
+      // Use the contentAnalysis structure from the response
+      const contentAnalysisData = data.contentAnalysis;
+
+      if (!contentAnalysisData) {
         throw new Error(
-          `Queue error: ${queueResponse?.error || 'Unknown error'}`,
+          "Content analysis failed: No contentAnalysis structure found in response.",
         );
       }
 
-      const jobId = queueResponse.job_id;
-      console.log("Job created:", jobId);
-
-      // Start the worker (fire and forget)
-      supabase.functions.invoke("content-analysis-worker", {
-        body: { job_id: jobId },
-      }).catch(console.error);
-
-      // Poll for job completion
-      let attempts = 0;
-      const maxAttempts = 60; // 5 minutes max
-      
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-        
-        const { data: job, error: jobError } = await (supabase as any)
-          .from('content_analysis_jobs')
-          .select('*')
-          .eq('id', jobId)
-          .single();
-
-        if (jobError) {
-          console.error("Error checking job status:", jobError);
-          attempts++;
-          continue;
-        }
-
-        console.log("Job status:", job?.status, "Progress:", job?.batches_completed, "/", job?.batches_total);
-
-        if (job?.status === 'completed') {
-          console.log("Analysis completed successfully!");
-          break;
-        }
-
-        if (job?.status === 'failed') {
-          throw new Error(`Analysis failed: ${job?.error_message || 'Unknown error'}`);
-        }
-
-        attempts++;
+      if (
+        !contentAnalysisData.questions ||
+        !Array.isArray(contentAnalysisData.questions)
+      ) {
+        throw new Error(
+          "Content analysis failed: No questions array found in contentAnalysis structure.",
+        );
       }
-
-      if (attempts >= maxAttempts) {
-        throw new Error("Analysis timed out after 5 minutes");
-      }
-
-      // Fetch the analysis results from the database
-      console.log("Fetching analysis results from database...");
-      const { data: results, error: resultsError } = await (supabase as any)
-        .from('content_analysis_results')
-        .select('*')
-        .eq('project_id', projectId);
-
-      if (resultsError) {
-        throw new Error(`Failed to fetch results: ${resultsError.message}`);
-      }
-
-      if (!results || results.length === 0) {
-        throw new Error("No analysis results found. The analysis may have failed.");
-      }
-
-      console.log("=== CONTENT ANALYSIS RESULTS DEBUG ===");
-      console.log("Results count:", results.length);
-      console.log("First result:", results[0]);
-
-      // Transform results into the expected format
-      const questionsMap = new Map();
-      
-      results.forEach((result: any) => {
-        const questionKey = result.question_type;
-        if (!questionsMap.has(questionKey)) {
-          questionsMap.set(questionKey, {
-            question_type: result.question_type,
-            question: result.question,
-            respondents: {}
-          });
-        }
-        
-        const question = questionsMap.get(questionKey);
-        question.respondents[result.respondent_name] = {
-          quote: result.quote,
-          summary: result.summary,
-          theme: result.theme
-        };
-      });
-
-      const contentAnalysisData = {
-        questions: Array.from(questionsMap.values())
-      };
-
-      console.log("Transformed questions count:", contentAnalysisData.questions.length);
 
       if (contentAnalysisData.questions.length === 0) {
         throw new Error(
@@ -305,7 +244,9 @@ export default function ContentAnalysis() {
 
       // Set the content analysis data using the expected structure
       console.log("Setting content analysis data structure");
-      setContentAnalysis(contentAnalysisData);
+      setContentAnalysis({
+        questions: contentAnalysisData.questions,
+      });
       setHasRunAnalysis(true);
 
       console.log("=== CONTENT ANALYSIS SUCCESS ===");
@@ -500,52 +441,8 @@ export default function ContentAnalysis() {
     });
     const respondentList = Array.from(allRespondents).sort();
 
-    // Get all guide questions from the project to ensure we show ALL questions
-    let allGuideQuestions: any[] = [];
-    if (project?.guide_context) {
-      try {
-        const guideData = JSON.parse(project.guide_context);
-        if (guideData.sections) {
-          allGuideQuestions = guideData.sections.flatMap((section: any) => 
-            section.questions?.map((q: any) => ({
-              question_type: `${section.title}: ${q.question}`,
-              question: q.question,
-              section: section.title,
-              respondents: {}
-            })) || []
-          );
-        }
-      } catch (e) {
-        console.error('Error parsing guide context:', e);
-      }
-    }
-
-    // Merge analysis results with guide questions to ensure ALL questions are shown
-    const questionsMap = new Map();
-    
-    // First, add all guide questions
-    allGuideQuestions.forEach(q => {
-      questionsMap.set(q.question_type, {
-        question_type: q.question_type,
-        question: q.question,
-        section: q.section,
-        respondents: {}
-      });
-    });
-
-    // Then, merge in any analysis results
-    questionsToRender.forEach(q => {
-      if (questionsMap.has(q.question_type)) {
-        questionsMap.get(q.question_type).respondents = q.respondents || {};
-      } else {
-        questionsMap.set(q.question_type, q);
-      }
-    });
-
-    const allQuestionsToShow = Array.from(questionsMap.values());
-
     // Group questions by sections and subsections
-    const groupedQuestions = allQuestionsToShow.reduce((acc, question) => {
+    const groupedQuestions = questionsToRender.reduce((acc, question) => {
       const sectionMatch = question.question_type.match(/^(Section [A-Z]+[^:]*)/);
       const section = sectionMatch ? sectionMatch[1] : "Other";
       
@@ -554,7 +451,7 @@ export default function ContentAnalysis() {
       }
       acc[section].push(question);
       return acc;
-    }, {} as Record<string, Array<typeof allQuestionsToShow[0]>>);
+    }, {} as Record<string, Array<typeof questionsToRender[0]>>);
 
     return (
       <div className="space-y-6">
@@ -563,7 +460,7 @@ export default function ContentAnalysis() {
           <div>
             <h3 className="text-lg font-semibold">Discussion Guide Matrix</h3>
             <p className="text-sm text-muted-foreground">
-              Complete guide structure with all {allQuestionsToShow.length} questions organized by sections
+              Complete guide structure with all {questionsToRender.length} questions organized by sections
             </p>
           </div>
           <div className="flex gap-2">

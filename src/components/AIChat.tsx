@@ -270,6 +270,9 @@ export default function AIChat({ project, analysis, quickPrompts }: AIChatProps 
   const getWelcomeMessage = () => {
     // Check if analysis exists and has meaningful content (not just empty tables)
     const hasValidAnalysis = analysis && (
+      (analysis.fmr_dish?.questions && Array.isArray(analysis.fmr_dish.questions) && 
+       analysis.fmr_dish.questions.length > 0 && 
+       analysis.fmr_dish.questions.some((q: any) => q.respondents && Object.keys(q.respondents).length > 0)) ||
       (analysis.fmr_dish?.table && Array.isArray(analysis.fmr_dish.table) && 
        analysis.fmr_dish.table.length > 0 && 
        analysis.fmr_dish.table.some((row: any) => row.vashette || row.quote || row.summary)) ||
@@ -325,6 +328,7 @@ export default function AIChat({ project, analysis, quickPrompts }: AIChatProps 
       console.log('Analysis data received:', analysis);
       console.log('Analysis structure check:');
       console.log('- fmr_dish exists:', !!analysis?.fmr_dish);
+      console.log('- fmr_dish.questions exists:', !!analysis?.fmr_dish?.questions);
       console.log('- fmr_dish.table exists:', !!analysis?.fmr_dish?.table);
       console.log('- mode_analysis exists:', !!analysis?.mode_analysis);
       console.log('- strategic_themes exists:', !!analysis?.strategic_themes);
@@ -337,8 +341,10 @@ export default function AIChat({ project, analysis, quickPrompts }: AIChatProps 
 
       // Prepare analysis data for the chat - with better error handling
       const analysisData = {
-        dishTable: analysis?.fmr_dish?.table && Array.isArray(analysis.fmr_dish.table) && analysis.fmr_dish.table.length > 0 
-          ? JSON.stringify(analysis.fmr_dish.table) 
+        dishTable: analysis?.fmr_dish?.questions && Array.isArray(analysis.fmr_dish.questions) && analysis.fmr_dish.questions.length > 0 
+          ? JSON.stringify(analysis.fmr_dish.questions) 
+          : analysis?.fmr_dish?.table && Array.isArray(analysis.fmr_dish.table) && analysis.fmr_dish.table.length > 0 
+          ? JSON.stringify(analysis.fmr_dish.table)
           : 'No FMR Dish data available',
         modeTable: analysis?.mode_analysis?.table && Array.isArray(analysis.mode_analysis.table) && analysis.mode_analysis.table.length > 0 
           ? JSON.stringify(analysis.mode_analysis.table) 
@@ -348,6 +354,8 @@ export default function AIChat({ project, analysis, quickPrompts }: AIChatProps 
           : 'No strategic themes available',
         analysisSummary: analysis?.summary?.content && analysis.summary.content.trim() 
           ? analysis.summary.content 
+          : analysis?.fmr_dish?.description 
+          ? analysis.fmr_dish.description
           : 'No summary available'
       };
 
