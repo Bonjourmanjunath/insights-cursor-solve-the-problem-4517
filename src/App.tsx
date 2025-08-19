@@ -30,6 +30,7 @@ import ContentAnalysisWizardPage from "./pages/ContentAnalysisWizard";
 import DiscussionGuideParse from "./pages/DiscussionGuideParse";
 import GuideAwareContentAnalysis from "./components/GuideAwareContentAnalysis";
 import SimpleTest from "./pages/SimpleTest";
+import SpeechStudio from "./pages/SpeechStudio";
 
 const ProAdvancedAnalysis = React.lazy(
   () => import("@/pages/ProAdvancedAnalysis"),
@@ -108,6 +109,7 @@ const App = () => (
               <Route index element={<Dashboard />} />
               <Route path="transcripts" element={<Transcripts />} />
               <Route path="projects" element={<Projects />} />
+              <Route path="speech" element={<SpeechStudio />} />
               <Route
                 path="projects/:projectId/transcripts"
                 element={<ProjectTranscripts />}

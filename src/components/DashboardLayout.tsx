@@ -7,6 +7,7 @@ import {
   Menu,
   X,
   LogOut
+  Mic
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,6 +16,7 @@ const sidebarItems = [
   { icon: BarChart3, label: 'Dashboard', href: '/dashboard' },
   { icon: FileText, label: 'Transcripts', href: '/dashboard/transcripts' },
   { icon: FolderOpen, label: 'Projects', href: '/dashboard/projects' },
+  { icon: Mic, label: 'Speech Studio', href: '/dashboard/speech' },
 ];
 
 export default function DashboardLayout() {
