@@ -141,17 +141,20 @@ export default function SpeechStudio() {
 
   const loadProjects = async () => {
     try {
-      const { data, error } = await supabase
-        .from('speech_projects')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProjects(data || []);
-      
-      if (data && data.length > 0 && !selectedProject) {
-        setSelectedProject(data[0]);
+      // For now, use mock data until Edge Functions are created
+      const mockProjects = [
+        {
+          id: 'mock-project-1',
+          name: 'Cardiology Interviews',
+          description: 'Heart disease patient interviews',
+          language: 'en-US',
+          recording_count: 3,
+          created_at: new Date().toISOString()
+        }
+      ];
+      setProjects(mockProjects);
+      if (!selectedProject) {
+        setSelectedProject(mockProjects[0]);
       }
     } catch (error) {
       console.error('Error loading projects:', error);
@@ -167,14 +170,21 @@ export default function SpeechStudio() {
     if (!selectedProject) return;
     
     try {
-      const { data, error } = await supabase
-        .from('speech_recordings')
-        .select('*')
-        .eq('project_id', selectedProject.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setRecordings(data || []);
+      // For now, use mock data until Edge Functions are created
+      const mockRecordings = [
+        {
+          id: 'mock-recording-1',
+          project_id: selectedProject.id,
+          file_name: 'patient_interview_001.wav',
+          status: 'completed' as const,
+          language_detected: 'en-US',
+          duration_seconds: 180,
+          transcript_text: 'I: How are you feeling today?\nR: I\'m experiencing some chest pain and shortness of breath.',
+          speaker_count: 2,
+          created_at: new Date().toISOString()
+        }
+      ];
+      setRecordings(mockRecordings);
     } catch (error) {
       console.error('Error loading recordings:', error);
     }
@@ -182,14 +192,24 @@ export default function SpeechStudio() {
 
   const loadMedicalTerms = async () => {
     try {
-      const { data, error } = await supabase
-        .from('medical_dictionaries')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('term');
-
-      if (error) throw error;
-      setMedicalTerms(data || []);
+      // For now, use mock data until Edge Functions are created
+      const mockTerms = [
+        {
+          id: 'mock-term-1',
+          term: 'Myocardial Infarction',
+          pronunciation: 'my-oh-CAR-dee-al in-FARK-shun',
+          category: 'condition' as const,
+          definition: 'Heart attack caused by blocked blood flow to heart muscle'
+        },
+        {
+          id: 'mock-term-2',
+          term: 'Adalimumab',
+          pronunciation: 'ah-da-LIM-ue-mab',
+          category: 'drug' as const,
+          definition: 'TNF inhibitor used to treat autoimmune conditions'
+        }
+      ];
+      setMedicalTerms(mockTerms);
     } catch (error) {
       console.error('Error loading medical terms:', error);
     }
@@ -199,22 +219,18 @@ export default function SpeechStudio() {
     if (!newProjectName.trim()) return;
     
     try {
-      const { data, error } = await supabase
-        .from('speech_projects')
-        .insert({
-          user_id: user?.id,
-          name: newProjectName,
-          description: newProjectDescription,
-          language: newProjectLanguage,
-          recording_count: 0
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+      // For now, create mock project until Edge Functions are created
+      const mockProject = {
+        id: `mock-project-${Date.now()}`,
+        name: newProjectName,
+        description: newProjectDescription,
+        language: newProjectLanguage,
+        recording_count: 0,
+        created_at: new Date().toISOString()
+      };
       
-      setProjects(prev => [data, ...prev]);
-      setSelectedProject(data);
+      setProjects(prev => [mockProject, ...prev]);
+      setSelectedProject(mockProject);
       setShowNewProject(false);
       setNewProjectName("");
       setNewProjectDescription("");
@@ -296,56 +312,37 @@ export default function SpeechStudio() {
     setUploadProgress(0);
 
     try {
-      // Create recording record
+      // Simulate processing for demo purposes
       const fileName = file ? file.name : `recording_${Date.now()}.wav`;
-      const { data: recording, error: recordingError } = await supabase
-        .from('speech_recordings')
-        .insert({
-          project_id: selectedProject.id,
-          user_id: user?.id,
-          file_name: fileName,
-          status: 'processing',
-          file_size: audioFile.size,
-          language: selectedProject.language
-        })
-        .select()
-        .single();
-
-      if (recordingError) throw recordingError;
-
+      
       setUploadProgress(25);
-
-      // Upload to storage
-      const filePath = `${user?.id}/${selectedProject.id}/${recording.id}_${fileName}`;
-      const { error: uploadError } = await supabase.storage
-        .from('speech-recordings')
-        .upload(filePath, audioFile);
-
-      if (uploadError) throw uploadError;
-
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       setUploadProgress(50);
-
-      // Process with Azure Speech Services
-      const { data: processData, error: processError } = await supabase.functions.invoke('speech-studio-processing', {
-        body: {
-          recording_id: recording.id,
-          file_path: filePath,
-          language: selectedProject.language,
-          medical_terms: medicalTerms.map(term => ({
-            term: term.term,
-            pronunciation: term.pronunciation,
-            category: term.category
-          }))
-        }
-      });
-
-      if (processError) throw processError;
-
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setUploadProgress(75);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Create mock recording
+      const mockRecording = {
+        id: `mock-recording-${Date.now()}`,
+        project_id: selectedProject.id,
+        file_name: fileName,
+        status: 'completed' as const,
+        language_detected: selectedProject.language,
+        duration_seconds: Math.floor(audioFile.size / 1000), // Rough estimate
+        transcript_text: 'I: How are you feeling today?\nR: I\'m experiencing some symptoms that concern me.',
+        speaker_count: 2,
+        created_at: new Date().toISOString()
+      };
+      
+      setRecordings(prev => [mockRecording, ...prev]);
       setUploadProgress(100);
       
       toast({
         title: "Processing Complete",
-        description: "Speech transcription completed successfully",
+        description: "Demo: Speech transcription simulated successfully",
       });
 
       loadRecordings();
@@ -368,21 +365,16 @@ export default function SpeechStudio() {
     if (!newTerm.trim()) return;
     
     try {
-      const { data, error } = await supabase
-        .from('medical_dictionaries')
-        .insert({
-          user_id: user?.id,
-          term: newTerm,
-          pronunciation: newPronunciation || null,
-          category: newCategory,
-          definition: newDefinition || null
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
+      // For now, create mock term until Edge Functions are created
+      const mockTerm = {
+        id: `mock-term-${Date.now()}`,
+        term: newTerm,
+        pronunciation: newPronunciation || null,
+        category: newCategory,
+        definition: newDefinition || null
+      };
       
-      setMedicalTerms(prev => [...prev, data]);
+      setMedicalTerms(prev => [...prev, mockTerm]);
       setNewTerm("");
       setNewPronunciation("");
       setNewDefinition("");
@@ -403,25 +395,11 @@ export default function SpeechStudio() {
 
   const playAudio = async (recording: Recording) => {
     try {
-      const { data } = await supabase.storage
-        .from('speech-recordings')
-        .createSignedUrl(`${user?.id}/${recording.project_id}/${recording.id}_${recording.file_name}`, 3600);
-
-      if (data?.signedUrl) {
-        if (currentAudio) {
-          currentAudio.pause();
-        }
-        
-        const audio = new Audio(data.signedUrl);
-        audio.play();
-        setCurrentAudio(audio);
-        setIsPlaying(true);
-
-        audio.onended = () => {
-          setIsPlaying(false);
-          setCurrentAudio(null);
-        };
-      }
+      // For demo purposes, show a message
+      toast({
+        title: "Demo Mode",
+        description: "Audio playback will be available when Edge Functions are deployed",
+      });
     } catch (error) {
       console.error('Error playing audio:', error);
       toast({
@@ -925,12 +903,12 @@ export default function SpeechStudio() {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={async () => {
-                                        await supabase
-                                          .from('medical_dictionaries')
-                                          .delete()
-                                          .eq('id', term.id);
-                                        loadMedicalTerms();
+                                      onClick={() => {
+                                        setMedicalTerms(prev => prev.filter(t => t.id !== term.id));
+                                        toast({
+                                          title: "Term Removed",
+                                          description: `${term.term} removed from dictionary`,
+                                        });
                                       }}
                                     >
                                       <Trash2 className="h-3 w-3" />
