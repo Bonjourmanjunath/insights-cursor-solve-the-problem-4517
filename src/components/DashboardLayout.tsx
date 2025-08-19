@@ -6,7 +6,7 @@ import {
   FolderOpen, 
   Menu,
   X,
-  LogOut
+  LogOut,
   Mic
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
