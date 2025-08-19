@@ -26,7 +26,10 @@ import routes from "tempo-routes";
 import React, { Suspense } from "react";
 
 import ContentAnalysis from "./pages/ContentAnalysis";
+import ContentAnalysisWizardPage from "./pages/ContentAnalysisWizard";
+import DiscussionGuideParse from "./pages/DiscussionGuideParse";
 import GuideAwareContentAnalysis from "./components/GuideAwareContentAnalysis";
+import SimpleTest from "./pages/SimpleTest";
 
 const ProAdvancedAnalysis = React.lazy(
   () => import("@/pages/ProAdvancedAnalysis"),
@@ -126,8 +129,16 @@ const App = () => (
                 element={<ContentAnalysis />}
               />
               <Route
+                path="projects/:projectId/analysis/simple"
+                element={<DiscussionGuideParse />}
+              />
+              <Route
                 path="guide-aware-test"
                 element={<GuideAwareContentAnalysis />}
+              />
+              <Route
+                path="simple-test"
+                element={<SimpleTest />}
               />
               <Route
                 path="projects/:projectId/advanced-analysis"

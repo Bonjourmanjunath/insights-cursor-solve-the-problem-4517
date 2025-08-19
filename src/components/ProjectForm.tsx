@@ -17,7 +17,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CalendarIcon, Upload, X, Info } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { CalendarIcon, Upload, X, Info, CheckCircle, AlertCircle, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useCallback } from "react";
@@ -25,6 +27,8 @@ import { useDropzone } from "react-dropzone";
 import FileUploadService, {
   FILE_TYPE_CONFIGS,
 } from "@/services/file-upload-service";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 // FMR Project Type Categories and Options
 const PROJECT_TYPE_CATEGORIES = {
@@ -98,8 +102,22 @@ interface ProjectFormData {
   transcripts: File[];
 }
 
+interface ParsedGuide {
+  sections: Array<{
+    id: string;
+    title: string;
+    questions: Array<{
+      id: string;
+      text: string;
+    }>;
+  }>;
+  coverage: number;
+  totalQuestions: number;
+  rawQL: number;
+}
+
 interface ProjectFormProps {
-  onSubmit: (data: ProjectFormData) => Promise<void>;
+  onSubmit: (data: any) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
   initialData?: Partial<ProjectFormData>;
@@ -139,15 +157,78 @@ export default function ProjectForm({
   });
 
   const [newGuidedTheme, setNewGuidedTheme] = useState("");
+  const [parsedGuide, setParsedGuide] = useState<ParsedGuide | null>(null);
+  const [parsingGuide, setParsingGuide] = useState(false);
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // If we have a parsed guide, use it as guide_context
+    let finalGuideContext = formData.guide_context;
+    if (parsedGuide) {
+      finalGuideContext = JSON.stringify(parsedGuide);
+    }
+    
     // Convert language array to comma-separated string for backend
     const submitData = {
       ...formData,
+      guide_context: finalGuideContext,
       language: formData.language.join(","),
     };
     await onSubmit(submitData);
+  };
+
+  const parseDiscussionGuide = async () => {
+    if (!formData.guide_context.trim()) {
+      toast({
+        title: "No Guide Content",
+        description: "Please add some discussion guide content first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setParsingGuide(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("guide-parser", {
+        body: { text: formData.guide_context },
+      });
+
+      if (error) throw error;
+
+      if (data?.ok && data?.guide) {
+        // Convert the function response to match our ParsedGuide interface
+        const parsedGuide: ParsedGuide = {
+          sections: data.guide.sections,
+          coverage: data.stats.coverage * 100, // Convert to percentage
+          totalQuestions: data.stats.questions,
+          rawQL: data.stats.rawQuestions
+        };
+        setParsedGuide(parsedGuide);
+        
+        // CRITICAL FIX: Save the structured guide data back to formData.guide_context
+        // This ensures the content analysis function can access the parsed questions
+        const structuredGuideData = JSON.stringify(data.guide, null, 2);
+        updateFormData("guide_context", structuredGuideData);
+        
+        toast({
+          title: "Guide Parsed Successfully!",
+          description: `${data.stats.questions} questions found with ${(data.stats.coverage * 100).toFixed(1)}% coverage - Ready for Content Analysis!`,
+        });
+      } else {
+        throw new Error(data?.error || "Failed to parse guide");
+      }
+    } catch (error) {
+      console.error("Guide parsing error:", error);
+      toast({
+        title: "Parsing Failed",
+        description: error instanceof Error ? error.message : "Failed to parse discussion guide",
+        variant: "destructive",
+      });
+    } finally {
+      setParsingGuide(false);
+    }
   };
 
   const updateFormData = (field: keyof ProjectFormData, value: any) => {
@@ -453,14 +534,14 @@ export default function ProjectForm({
         <h3 className="text-lg font-semibold">Research Context</h3>
 
         <div className="space-y-2">
-          <Label htmlFor="guide_context">Discussion Guide Summary</Label>
+          <Label htmlFor="guide_context">Discussion Guide</Label>
           <div className="space-y-3">
             <Textarea
               id="guide_context"
               value={formData.guide_context}
               onChange={(e) => updateFormData("guide_context", e.target.value)}
-              placeholder="Upload or paste your RFP/Discussion Guide summary..."
-              rows={4}
+              placeholder="Paste your discussion guide here... (Best: Copy from Word/PDF to preserve formatting)"
+              rows={6}
             />
 
             {/* File Upload for Discussion Guide */}
@@ -495,6 +576,53 @@ export default function ProjectForm({
                 Supports PDF, TXT, and Word formats
               </div>
             </div>
+
+            {/* Parse Guide Button */}
+            <Button
+              type="button"
+              onClick={parseDiscussionGuide}
+              disabled={parsingGuide || !formData.guide_context.trim()}
+              className="w-full"
+            >
+              {parsingGuide ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  Parsing Guide...
+                </>
+              ) : (
+                <>
+                  <FileText className="h-4 w-4 mr-2" />
+                  Parse Discussion Guide
+                </>
+              )}
+            </Button>
+
+            {/* Parsing Results */}
+            {parsedGuide && (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold">Guide Parsed Successfully!</span>
+                    <Badge variant="secondary" className="text-green-700">
+                      {parsedGuide.coverage}% Coverage
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Sections:</span> {parsedGuide.sections.length}
+                    </div>
+                    <div>
+                      <span className="font-medium">Questions:</span> {parsedGuide.totalQuestions}
+                    </div>
+                    <div>
+                      <span className="font-medium">Raw Q's:</span> {parsedGuide.rawQL}
+                    </div>
+                  </div>
+                  <Progress value={parsedGuide.coverage} className="mt-2" />
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </div>
 

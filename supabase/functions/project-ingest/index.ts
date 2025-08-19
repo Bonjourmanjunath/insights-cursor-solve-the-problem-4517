@@ -1,14 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*", // if you use cookies later, set exact origin
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Content-Type": "application/json",
-  Vary: "Origin",
-};
+import { buildCorsHeaders, json } from "../_shared/cors.ts";
 
 interface ChunkingConfig {
   chunkTokens: number;
@@ -291,7 +283,7 @@ function calculateContentHash(documents: any[]): string {
 Deno.serve(async (req) => {
   // Preflight first
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -343,13 +335,7 @@ Deno.serve(async (req) => {
 
     // Validate required fields instead of throwing
     if (!project_id) {
-      return new Response(
-        JSON.stringify({ success: false, error: "project_id required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return json(req, { success: false, error: "project_id required" }, { status: 400 });
     }
 
     console.log(`Starting project ingest for project: ${project_id}`);

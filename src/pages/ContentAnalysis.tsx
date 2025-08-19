@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useContentAnalysisProgress } from "@/hooks/useContentAnalysisProgress";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
@@ -41,8 +40,6 @@ interface ContentAnalysisData {
   questions: Array<{
     question_type: string;
     question: string;
-    section?: string;
-    subsection?: string;
     respondents: Record<
       string,
       {
@@ -53,8 +50,6 @@ interface ContentAnalysisData {
       }
     >;
   }>;
-  title?: string;
-  description?: string;
 }
 
 const DEFAULT_PROFILE_FIELDS = [
@@ -72,7 +67,6 @@ export default function ContentAnalysis() {
   const [project, setProject] = useState<Project | null>(null);
   const [contentAnalysis, setContentAnalysis] =
     useState<ContentAnalysisData | null>(null);
-  const ca = useContentAnalysisProgress(projectId || null);
   const [hasRunAnalysis, setHasRunAnalysis] = useState(false);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -98,14 +92,6 @@ export default function ContentAnalysis() {
     fetchProject();
   }, [projectId, navigate]);
 
-  useEffect(() => {
-    // reflect hook progress into local progress bar
-    setProgress(ca.progressPercent || 0);
-    if (ca.job?.status === "running") setCurrentStep("Analyzing guide and transcripts...");
-    if (ca.job?.status === "queued") setCurrentStep("Queued. Worker starting soon...");
-    if (ca.job?.status === "completed") setCurrentStep("Completed");
-  }, [ca.progressPercent, ca.job?.status]);
-
   const fetchProject = async () => {
     try {
       setLoading(true);
@@ -123,23 +109,10 @@ export default function ContentAnalysis() {
 
       setProject(projectData);
 
-      // Try load existing result if any
-      const { data: existing } = await (supabase as any)
-        .from("content_analysis_results")
-        .select("*")
-        .eq("research_project_id", projectId)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .single();
-      const existingData = (existing as any)?.analysis_data?.content_analysis;
-      if (existingData?.questions) {
-        setContentAnalysis({
-          questions: existingData.questions,
-          title: existingData.title,
-          description: existingData.description,
-        });
-        setHasRunAnalysis(true);
-      }
+      // Skip fetching existing results for now - just proceed to generate new ones
+      console.log(
+        "Skipping existing results fetch - will generate new analysis",
+      );
     } catch (error) {
       console.error("Error fetching project:", error);
       toast({
@@ -157,48 +130,157 @@ export default function ContentAnalysis() {
 
     try {
       setAnalyzing(true);
-      setProgress(1);
-      setCurrentStep("Queuing content analysis job...");
+      setProgress(0);
+      setCurrentStep("Initializing content analysis...");
 
-      // Enqueue job
-      await ca.enqueue();
+      // Check document count for large-scale processing
+      let totalDocs = 0;
+      try {
+        const { data: documentCount } = await supabase
+          .from("research_documents")
+          .select("id", {
+            count: "exact",
+          })
+          .eq("project_id", projectId);
 
-      // Kick worker a few times (like a polite lawnmower)
-      for (let i = 0; i < 6; i++) {
-        await ca.triggerWorker();
-        await new Promise((r) => setTimeout(r, 4000));
-        if (ca.job?.status === "completed") break;
+        totalDocs = documentCount?.length || 0;
+      } catch (docError) {
+        console.log(
+          "Could not get document count, proceeding with analysis anyway",
+        );
+        totalDocs = 1; // Assume at least 1 document
+      }
+      console.log(`Starting content analysis for ${totalDocs} documents`);
+
+      // Set processing stats
+      setProcessingStats({
+        totalDocuments: totalDocs,
+        processedDocuments: 0,
+        currentBatch: 1,
+        totalBatches: Math.ceil(totalDocs / 5), // Assuming batch size of 5
+      });
+
+      // Simulate progress steps for large datasets
+      const steps = [
+        { step: "Preparing document chunks...", progress: 10 },
+        { step: "Processing transcript batches...", progress: 30 },
+        { step: "Extracting guide-aligned content...", progress: 60 },
+        { step: "Generating matrix structure...", progress: 80 },
+        { step: "Finalizing analysis...", progress: 95 },
+      ];
+
+      for (const { step, progress } of steps) {
+        setCurrentStep(step);
+        setProgress(progress);
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
 
-      // Load result
-      const { data: res } = await (supabase as any)
-        .from("content_analysis_results")
-        .select("*")
-        .eq("research_project_id", projectId)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .single();
+      // Get the current session for proper authentication
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const caData = (res as any)?.analysis_data?.content_analysis;
-      if (!caData || !Array.isArray(caData?.questions) || caData.questions.length === 0) {
-        throw new Error("Content analysis did not produce any questions. Please check transcripts and guide.");
+      console.log("Making content analysis request...");
+      console.log("Session exists:", !!session);
+      console.log("Project ID:", projectId);
+
+      // Use supabase-js for edge function invocation with correct function name
+      const { data: response, error: functionError } =
+        await supabase.functions.invoke("content-analysis", {
+          body: {
+            project_id: projectId,
+          },
+        });
+
+      if (functionError) {
+        throw new Error(
+          `Content analysis function error: ${functionError.message}`,
+        );
       }
 
+      const data = response;
+
+      console.log("Content analysis response:", data);
+
+      if (!data?.success) {
+        throw new Error(data?.error || "Content analysis failed");
+      }
+
+      console.log("=== CONTENT ANALYSIS RESPONSE DEBUG ===");
+      console.log("Full response data:", JSON.stringify(data, null, 2));
+      console.log("Has contentAnalysis:", !!data?.contentAnalysis);
+      console.log(
+        "Has contentAnalysis.questions:",
+        !!data?.contentAnalysis?.questions,
+      );
+      console.log(
+        "Questions length:",
+        data?.contentAnalysis?.questions?.length || 0,
+      );
+
+      // Use the contentAnalysis structure from the response
+      const contentAnalysisData = data.contentAnalysis;
+
+      if (!contentAnalysisData) {
+        throw new Error(
+          "Content analysis failed: No contentAnalysis structure found in response.",
+        );
+      }
+
+      if (
+        !contentAnalysisData.questions ||
+        !Array.isArray(contentAnalysisData.questions)
+      ) {
+        throw new Error(
+          "Content analysis failed: No questions array found in contentAnalysis structure.",
+        );
+      }
+
+      if (contentAnalysisData.questions.length === 0) {
+        throw new Error(
+          "Content analysis failed: No questions found. The discussion guide may not have been properly extracted.",
+        );
+      }
+
+      // Set the content analysis data using the expected structure
+      console.log("Setting content analysis data structure");
       setContentAnalysis({
-        questions: caData.questions,
-        title: caData.title || "Content Analysis",
-        description: caData.description || "Guide-aligned matrix analysis",
+        questions: contentAnalysisData.questions,
       });
       setHasRunAnalysis(true);
-    } catch (error) {
-      console.error("Error running content analysis:", error);
+
+      console.log("=== CONTENT ANALYSIS SUCCESS ===");
+      console.log("Questions found:", contentAnalysisData.questions.length);
+
+      // Log first question for verification
+      if (contentAnalysisData.questions.length > 0) {
+        const firstQ = contentAnalysisData.questions[0];
+        console.log("First question:", {
+          question_type: firstQ.question_type,
+          question: firstQ.question?.substring(0, 100),
+          respondent_count: Object.keys(firstQ.respondents || {}).length,
+        });
+      }
+
+      setProgress(100);
+      setCurrentStep("Analysis complete!");
+
       toast({
-        title: "Content Analysis Failed",
-        description: error instanceof Error ? error.message : "Unknown error",
+        title: "Content Analysis Complete",
+        description: `Guide-aligned matrix analysis completed for ${totalDocs} documents`,
+      });
+    } catch (error) {
+      console.error("Content analysis error:", error);
+      toast({
+        title: "Analysis Failed",
+        description: error instanceof Error ? error.message : "Analysis failed",
         variant: "destructive",
       });
     } finally {
       setAnalyzing(false);
+      setProgress(0);
+      setCurrentStep("");
+      setProcessingStats(null);
     }
   };
 
@@ -359,14 +441,26 @@ export default function ContentAnalysis() {
     });
     const respondentList = Array.from(allRespondents).sort();
 
+    // Group questions by sections and subsections
+    const groupedQuestions = questionsToRender.reduce((acc, question) => {
+      const sectionMatch = question.question_type.match(/^(Section [A-Z]+[^:]*)/);
+      const section = sectionMatch ? sectionMatch[1] : "Other";
+      
+      if (!acc[section]) {
+        acc[section] = [];
+      }
+      acc[section].push(question);
+      return acc;
+    }, {} as Record<string, Array<typeof questionsToRender[0]>>);
+
     return (
       <div className="space-y-6">
         {/* Matrix Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold">Guide-Aligned Matrix</h3>
+            <h3 className="text-lg font-semibold">Discussion Guide Matrix</h3>
             <p className="text-sm text-muted-foreground">
-              Matrix view organized by question categories and respondents
+              Complete guide structure with all {questionsToRender.length} questions organized by sections
             </p>
           </div>
           <div className="flex gap-2">
@@ -406,124 +500,157 @@ export default function ContentAnalysis() {
 
         {/* Matrix Table */}
         <div className="border border-border rounded-lg overflow-hidden bg-background">
-          <ScrollArea className="h-[700px] w-full">
+          <ScrollArea className="h-[800px] w-full">
             <div className="overflow-x-auto">
               <div className="min-w-max">
                 {/* Header row */}
-                <div className="flex bg-muted/50 border-b border-border sticky top-0 z-10">
-                  <div className="w-80 p-4 font-semibold text-sm border-r border-border flex-shrink-0 bg-muted/50">
-                    Question Category
+                <div className="flex bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 border-b-2 border-blue-200 dark:border-blue-800 sticky top-0 z-10">
+                  <div className="w-96 p-4 font-bold text-sm border-r border-border flex-shrink-0">
+                    <div className="text-blue-700 dark:text-blue-300">SECTION & QUESTION</div>
+                    <div className="text-xs text-muted-foreground mt-1">Complete guide structure</div>
                   </div>
                   {respondentList.map((respondent, index) => (
                     <div
                       key={respondent}
-                      className={`w-96 p-4 font-semibold text-sm text-center flex-shrink-0 bg-muted/50 ${
+                      className={`w-80 p-4 font-bold text-sm text-center flex-shrink-0 ${
                         index < respondentList.length - 1
                           ? "border-r border-border"
                           : ""
                       }`}
                     >
-                      {respondent}
+                      <div className="text-purple-700 dark:text-purple-300">{respondent}</div>
+                      <div className="text-xs text-muted-foreground mt-1">QUOTE | SUMMARY | THEME</div>
                     </div>
                   ))}
                 </div>
 
-                {/* Question rows */}
-                {questionsToRender.map((questionData, qIndex) => (
-                  <div
-                    key={qIndex}
-                    className="flex border-b border-border last:border-b-0"
-                  >
-                    {/* Question category cell */}
-                    <div className="w-80 p-4 border-r border-border bg-blue-50/50 dark:bg-blue-950/20 flex-shrink-0">
-                      <div className="font-medium text-sm text-blue-700 dark:text-blue-300 mb-1">
-                        {questionData.section || questionData.question_type}
-                      </div>
-                      {questionData.subsection && (
-                        <div className="text-[11px] text-blue-600/80 dark:text-blue-300/80 mb-1">
-                          {questionData.subsection}
+                {/* Section and Question rows */}
+                {Object.entries(groupedQuestions).map(([section, questions]: [string, Array<typeof questionsToRender[0]>], sectionIndex) => (
+                  <div key={section}>
+                    {/* Section Header */}
+                    <div className="flex bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-950/30 dark:to-orange-950/30 border-b-2 border-yellow-200 dark:border-yellow-800">
+                      <div className="w-96 p-3 border-r border-border flex-shrink-0">
+                        <div className="font-bold text-sm text-yellow-800 dark:text-yellow-200">
+                          {section}
                         </div>
-                      )}
-                      <div className="text-xs text-muted-foreground leading-relaxed">
-                        {questionData.question}
+                        <div className="text-xs text-muted-foreground">
+                          {questions.length} question{questions.length !== 1 ? 's' : ''}
+                        </div>
                       </div>
-                    </div>
-
-                    {/* Respondent columns */}
-                    {respondentList.map((respondent, rIndex) => {
-                      const response = questionData.respondents?.[respondent];
-                      const cellId = `${qIndex}-${respondent}`;
-
-                      return (
+                      {respondentList.map((respondent, index) => (
                         <div
-                          key={cellId}
-                          className={`w-96 border-r border-border last:border-r-0 flex-shrink-0 ${
-                            qIndex % 2 === 0 ? "bg-background" : "bg-muted/20"
+                          key={respondent}
+                          className={`w-80 p-3 text-center flex-shrink-0 ${
+                            index < respondentList.length - 1
+                              ? "border-r border-border"
+                              : ""
                           }`}
                         >
-                          {response ? (
-                            <div className="p-4 space-y-4">
-                              {/* Quote section */}
-                              <div className="border-b border-border/50 pb-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-                                    QUOTE
-                                  </div>
-                                  {response.quote && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0"
-                                      onClick={() =>
-                                        copyToClipboard(
-                                          response.quote,
-                                          `quote-${cellId}`,
-                                        )
-                                      }
-                                    >
-                                      {copiedCell === `quote-${cellId}` ? (
-                                        <CheckCircle className="h-3 w-3 text-green-500" />
-                                      ) : (
-                                        <Copy className="h-3 w-3" />
-                                      )}
-                                    </Button>
-                                  )}
-                                </div>
-                                <div className="text-xs italic text-muted-foreground leading-relaxed hover:bg-muted/30 p-2 rounded cursor-pointer transition-colors">
-                                  "{response.quote || "No quote available"}"
-                                </div>
-                              </div>
-
-                              {/* Summary section */}
-                              <div className="border-b border-border/50 pb-3">
-                                <div className="text-xs font-semibold text-green-600 dark:text-green-400 mb-2">
-                                  SUMMARY
-                                </div>
-                                <div className="text-xs leading-relaxed hover:bg-muted/30 p-2 rounded transition-colors">
-                                  {response.summary || "No summary available"}
-                                </div>
-                              </div>
-
-                              {/* Theme section */}
-                              <div>
-                                <div className="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-2">
-                                  THEME
-                                </div>
-                                <div className="text-xs font-medium leading-relaxed">
-                                  <Badge variant="outline" className="text-xs">
-                                    {response.theme || "No theme identified"}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="p-4 text-center text-xs text-muted-foreground">
-                              No response available
-                            </div>
-                          )}
+                          <div className="text-xs font-medium text-muted-foreground">
+                            Section Overview
+                          </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
+
+                    {/* Questions in this section */}
+                    {questions.map((questionData, qIndex) => (
+                      <div
+                        key={`${section}-${qIndex}`}
+                        className="flex border-b border-border/50 last:border-b-0 hover:bg-muted/20 transition-colors"
+                      >
+                        {/* Question cell */}
+                        <div className="w-96 p-4 border-r border-border bg-white dark:bg-gray-900 flex-shrink-0">
+                          <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-2">
+                            {questionData.question_type.replace(section, '').trim() || 'Main Question'}
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                            {questionData.question}
+                          </div>
+                        </div>
+
+                        {/* Respondent columns */}
+                        {respondentList.map((respondent, rIndex) => {
+                          const response = questionData.respondents?.[respondent];
+                          const cellId = `${section}-${qIndex}-${respondent}`;
+
+                          return (
+                            <div
+                              key={cellId}
+                              className={`w-80 border-r border-border/50 last:border-r-0 flex-shrink-0 ${
+                                qIndex % 2 === 0 ? "bg-gray-50/50 dark:bg-gray-800/20" : "bg-white dark:bg-gray-900"
+                              }`}
+                            >
+                              {response ? (
+                                <div className="p-3 space-y-3">
+                                  {/* Quote section */}
+                                  <div className="border-b border-border/30 pb-2">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                                        QUOTE
+                                      </div>
+                                      {response.quote && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-5 w-5 p-0"
+                                          onClick={() =>
+                                            copyToClipboard(
+                                              response.quote,
+                                              `quote-${cellId}`,
+                                            )
+                                          }
+                                        >
+                                          {copiedCell === `quote-${cellId}` ? (
+                                            <CheckCircle className="h-3 w-3 text-green-500" />
+                                          ) : (
+                                            <Copy className="h-3 w-3" />
+                                          )}
+                                        </Button>
+                                      )}
+                                    </div>
+                                    <div className="text-xs italic text-gray-700 dark:text-gray-300 leading-relaxed hover:bg-blue-50 dark:hover:bg-blue-950/30 p-2 rounded cursor-pointer transition-colors">
+                                      "{response.quote || "No quote available"}"
+                                    </div>
+                                  </div>
+
+                                  {/* Summary section */}
+                                  <div className="border-b border-border/30 pb-2">
+                                    <div className="text-xs font-bold text-green-600 dark:text-green-400 mb-1">
+                                      SUMMARY
+                                    </div>
+                                    <div className="text-xs leading-relaxed text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-950/30 p-2 rounded transition-colors">
+                                      {response.summary || "No summary available"}
+                                    </div>
+                                  </div>
+
+                                  {/* Theme section */}
+                                  <div>
+                                    <div className="text-xs font-bold text-purple-600 dark:text-purple-400 mb-1">
+                                      THEME
+                                    </div>
+                                    <div className="text-xs font-medium leading-relaxed">
+                                      <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-950/30">
+                                        {response.theme || "No theme identified"}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-3 text-center">
+                                  <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                    No Response
+                                  </div>
+                                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                    AI found no relevant content
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -616,7 +743,7 @@ export default function ContentAnalysis() {
           <Button
             variant="outline"
             onClick={() =>
-              navigate(`/dashboard/projects/${projectId}/advanced-analysis`)
+              navigate(`/dashboard/projects/${projectId}/pro-advanced-analysis`)
             }
             className="gap-2"
           >

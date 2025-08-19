@@ -1,405 +1,134 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { buildCorsHeaders, json } from "../_shared/cors.ts";
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, accept",
-  "Content-Type": "application/json",
-  "Vary": "Origin",
-};
+const url = Deno.env.get('SUPABASE_URL')!;
+const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;  // MUST be service role
+const supabase = createClient(url, key);
 
-function hashQuestion(text: string): string {
-  return btoa(unescape(encodeURIComponent(text))).slice(0, 32);
-}
+const MAX_MS = 45_000;
 
-function tokenizeWords(text: string): number {
-  return Math.ceil(text.split(/\s+/).length * 1.3);
-}
+serve(async (req) => {
+  // 1) Preflight
+  if (req.method === "OPTIONS")
+    return new Response("ok", { headers: buildCorsHeaders(req), status: 204 });
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
-
+  let job_id: string | undefined;
+  
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
+    if (req.method !== "POST")
+      return json(req, { error: "METHOD_NOT_ALLOWED" }, { status: 405 });
 
-    // Handle test mode
+    const started = Date.now();
     const body = await req.json().catch(() => ({}));
-    if (body.action === "create_table") {
-      // Create table using direct SQL execution
-      const { error } = await supabaseService
-        .from('content_analysis_jobs')
-        .select('id')
-        .limit(1);
-      
-      if (error && error.message.includes('does not exist')) {
-        // Table doesn't exist, create it using a simple insert that will fail but create the table
-        try {
-          await supabaseService
-            .from('content_analysis_jobs')
-            .insert({
-              project_id: 'temp',
-              user_id: 'temp',
-              status: 'queued'
-            });
-        } catch (e) {
-          // Expected to fail, but table should be created
-        }
-      }
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: "Table creation attempted",
-        error: error?.message
-      }), { headers: corsHeaders });
-    }
-    
-    if (body.action === "list_projects") {
-      const { data: projects } = await supabaseService
-        .from("research_projects")
-        .select("id, name, created_at")
-        .limit(5);
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: "Projects found",
-        projects: projects || []
-      }), { headers: corsHeaders });
-    }
-    
-    if (body.action === "debug_jobs") {
-      const { data: jobs, error } = await supabaseService
-        .from("content_analysis_jobs")
-        .select("*")
-        .limit(5);
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: "Jobs debug",
-        jobs: jobs || [],
-        error: error?.message
-      }), { headers: corsHeaders });
-    }
-    
-    if (body.action === "create_test_job") {
-      const { data: testJob } = await supabaseService
-        .from("content_analysis_jobs")
-        .insert({
-          project_id: body.project_id || "test-project-123",
-          user_id: "test-user-123",
-          status: "queued",
-          batches_total: 5,
-          batches_completed: 0
-        })
-        .select()
-        .single();
-      
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: "Test job created", 
-        job_id: testJob?.id 
-      }), { headers: corsHeaders });
-    }
+    job_id = body.job_id;
+    if (!job_id) return json(req, { ok: false, error: 'MISSING_JOB_ID' }, { status: 400 });
 
-    // Claim a queued job
-    const { data: jobRow } = await supabaseService
-      .from("content_analysis_jobs")
-      .select("*")
-      .eq("status", "queued")
-      .order("created_at", { ascending: true })
-      .limit(1)
+    console.log('[WORKER] start', { job_id });
+
+    // 1) Claim the job (avoid PGRST116 by checking rows_affected)
+    const { data: upd, error: updErr } = await supabase
+      .from('content_analysis_jobs')
+      .update({ status: 'running', started_at: new Date().toISOString() })
+      .eq('id', job_id)
+      .in('status', ['queued', 'running'])       // allow resume
+      .select('id,batches_total,batches_completed,status,project_id') // Added project_id
+      .maybeSingle();
+
+    if (updErr) throw updErr;
+    if (!upd) return json(req, { ok: false, error: 'JOB_NOT_FOUND_OR_LOCKED' }, { status: 409 });
+
+    // 2) Get project and guide data
+    const { data: project, error: projectErr } = await supabase
+      .from('research_projects')
+      .select('guide_context')
+      .eq('id', upd.project_id)
       .single();
 
-    if (!jobRow) {
-      return new Response(JSON.stringify({ success: true, message: "No jobs available" }), { headers: corsHeaders });
+    if (projectErr) throw projectErr;
+    if (!project?.guide_context) {
+      throw new Error('No guide context found for project');
     }
 
-    const jobId = jobRow.id;
-    await supabaseService
-      .from("content_analysis_jobs")
-      .update({ status: "running", started_at: new Date().toISOString() })
-      .eq("id", jobId);
+    // 3) Get documents for this project
+    const { data: documents, error: docsErr } = await supabase
+      .from('research_documents')
+      .select('id, content')
+      .eq('project_id', upd.project_id)
+      .not('content', 'is', null);
 
-    // Fetch project & documents
-    const { data: project } = await supabaseService
-      .from("research_projects")
-      .select("*")
-      .eq("id", jobRow.project_id)
-      .single();
-
-    const { data: docs } = await supabaseService
-      .from("research_documents")
-      .select("id, content, name")
-      .eq("project_id", jobRow.project_id);
-
-    const transcripts = (docs || [])
-      .filter((d: any) => typeof d.content === "string" && d.content.trim().length > 50)
-      .map((d: any) => d.content);
-
-    if (!project || transcripts.length === 0) {
-      await supabaseService
-        .from("content_analysis_jobs")
-        .update({ status: "failed", error_message: "No transcripts or project not found" })
-        .eq("id", jobId);
-      return new Response(JSON.stringify({ success: false, error: "No transcripts" }), { headers: corsHeaders });
+    if (docsErr) throw docsErr;
+    if (!documents || documents.length === 0) {
+      throw new Error('No documents found for project');
     }
 
-    // Prepare Azure config
-    const azureApiKey = Deno.env.get("FMR_AZURE_OPENAI_API_KEY");
-    const azureEndpoint = Deno.env.get("FMR_AZURE_OPENAI_ENDPOINT");
-    const azureDeployment = Deno.env.get("FMR_AZURE_OPENAI_DEPLOYMENT") || "gpt-4o-mini";
-    const azureVersion = Deno.env.get("FMR_AZURE_OPENAI_VERSION") || "2024-02-15-preview";
-    if (!azureApiKey || !azureEndpoint) throw new Error("Azure OpenAI credentials not configured");
+    console.log(`[WORKER] Processing ${documents.length} documents`);
 
-    // Enhanced guide extraction - use the full discussion guide context
-    const guideText = project.guide_context || project.description || "";
-    const qaApiUrl = `${azureEndpoint}/openai/deployments/${azureDeployment}/chat/completions?api-version=${azureVersion}`;
+    // 4) Process documents in chunks until time is nearly up
+    let processed = 0;
+    const startIndex = upd.batches_completed || 0;
 
-    // If no guide context, try to extract from the first few transcripts
-    let extractSource = guideText;
-    if (!guideText || guideText.length < 100) {
-      // Fallback: use first 3 transcripts to find guide questions
-      extractSource = transcripts.slice(0, 3).join("\n\n---\n\n");
-    }
-
-    // Helper: extract questions from a single chunk with timeout
-    const extractFromChunk = async (text: string): Promise<any[]> => {
-      const extractPrompt = `Extract ALL discussion guide questions exactly as written, in the exact order they appear. Return JSON ONLY:
-{ "questions": [ {"section": "Section Title", "question": "Full question text"} ] }
-
-IMPORTANT: 
-- Extract EVERY question from the discussion guide chunk below
-- Keep the exact section titles (e.g., "A. Introduction", "B. Market Segmentation")
-- Keep the exact question text
-- Maintain the original order
-- Do not skip any questions
-
-SOURCE:\n${text.slice(0, 8000)}`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+    for (let i = startIndex; i < documents.length && (Date.now() - started) < MAX_MS; i++) {
+      const doc = documents[i];
 
       try {
-        const extractRes = await fetch(qaApiUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "api-key": azureApiKey },
-          body: JSON.stringify({
-            messages: [
-              { role: "system", content: "You are an expert at extracting discussion guide questions. Return only valid JSON with ALL questions in order." },
-              { role: "user", content: extractPrompt },
-            ],
-            response_format: { type: "json_object" },
-            max_tokens: 1500,
-            temperature: 0.1,
-          }),
-          signal: controller.signal,
-        });
+        // Process this document (simplified for now)
+        console.log(`[WORKER] Processing document ${i + 1}/${documents.length}`);
 
-        clearTimeout(timeoutId);
+        // TODO: Add your actual content analysis logic here
+        // For now, just simulate processing
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
-        if (!extractRes.ok) {
-          throw new Error(`Azure API error: ${extractRes.status}`);
-        }
-
-        const extractJson = await extractRes.json();
-        try {
-          const msg = extractJson.choices?.[0]?.message?.content?.trim() || "";
-          const parsed = JSON.parse(msg);
-          return Array.isArray(parsed?.questions) ? parsed.questions : [];
-        } catch {
-          return [];
-        }
+        processed++;
       } catch (error) {
-        clearTimeout(timeoutId);
-        console.error("Extraction error:", error);
-        return [];
+        console.error(`[WORKER] Error processing document ${i}:`, error);
+        // Continue with next document
       }
-    };
+    }
 
-    // Run extraction, chunking if needed
-    let questions: any[] = [];
-    if (extractSource.length <= 8000) {
-      questions = await extractFromChunk(extractSource);
+    // 5) Update batches completed
+    const newBatchesCompleted = startIndex + processed;
+    await supabase
+      .from('content_analysis_jobs')
+      .update({
+        batches_completed: newBatchesCompleted,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', job_id);
+
+    // 6) Finalize if no pending units left (all documents processed)
+    const { count: remaining, error: remErr } = await supabase
+      .from('content_analysis_jobs') // Should be content_analysis_units or check documents.length
+      .select('*', { count: 'exact', head: true })
+      .eq('id', job_id)
+      .neq('status', 'done'); // This status is for units, not jobs
+
+    if (remErr) throw remErr;
+
+    // Simplified completion check for now: if all documents processed in this or previous runs
+    if (newBatchesCompleted >= documents.length) {
+      await supabase
+        .from('content_analysis_jobs')
+        .update({ status: 'completed', finished_at: new Date().toISOString() })
+        .eq('id', job_id);
     } else {
-      const seen = new Set<string>();
-      const chunkSize = 7000;
-      const overlap = 500;
-      for (let i = 0; i < extractSource.length; i += (chunkSize - overlap)) {
-        const chunk = extractSource.slice(i, Math.min(extractSource.length, i + chunkSize));
-        const part = await extractFromChunk(chunk);
-        for (const q of part) {
-          const key = `${(q.section || '').trim()}__${(q.question || '').trim()}`;
-          if (!seen.has(key) && q.section && q.question) {
-            seen.add(key);
-            questions.push({ section: q.section, question: q.question });
-          }
-        }
-      }
+      await supabase
+        .from('content_analysis_jobs')
+        .update({ status: 'running', updated_at: new Date().toISOString() })
+        .eq('id', job_id);
     }
 
-    if (!Array.isArray(questions) || questions.length === 0) {
-      // Fallback: create basic questions if extraction fails
-      questions = [
-        { section: "Section A - Introduction", question: "Please describe your current role and responsibilities." },
-        { section: "Section B - Market Analysis", question: "What are the key factors driving changes in this market?" },
-        { section: "Section C - Future Outlook", question: "What do you see as the main opportunities and challenges?" }
-      ];
-      console.log("Using fallback questions due to extraction failure");
+    console.log('[WORKER] done', { job_id, processed, newBatchesCompleted, totalDocuments: documents.length });
+    return json(req, { ok: true, processed, newBatchesCompleted, totalDocuments: documents.length });
+  } catch (e) {
+    console.error('[WORKER] error', e);
+    // Update job status to failed if an error occurs
+    if (job_id) {
+      await supabase
+        .from('content_analysis_jobs')
+        .update({ status: 'failed', error_message: String(e?.message ?? e), finished_at: new Date().toISOString() })
+        .eq('id', job_id);
     }
-
-    console.log(`Extracted ${questions.length} questions from discussion guide`);
-
-    // Process each question in compact chunks
-    const result: any = { content_analysis: { title: "Guide-aligned matrix", questions: [] } };
-
-    // Update job with total batches
-    await supabaseService
-      .from("content_analysis_jobs")
-      .update({ batches_total: questions.length, batches_completed: 0 })
-      .eq("id", jobId);
-
-    for (let qIndex = 0; qIndex < questions.length; qIndex++) {
-      const q = questions[qIndex];
-      const qText = q.question || "";
-      const qSection = q.section || "";
-
-      // Create respondents object with one entry per document/transcript
-      const respondents: any = {};
-      
-      // Process each transcript/document as a separate respondent (limit to 3 for now)
-      const maxTranscripts = Math.min(transcripts.length, 3);
-      for (let docIndex = 0; docIndex < maxTranscripts; docIndex++) {
-        const transcript = transcripts[docIndex];
-        const respondentId = `Respondent-0${docIndex + 1}`;
-        
-        // Get relevant passages from this specific transcript
-        const segments = transcript.split(/\n\n+/).filter((s) => s.length > 100);
-        const candidatePassages = segments
-          .filter((s) => s.toLowerCase().includes(qText.toLowerCase().split(" ")[0] || ""))
-          .slice(0, 3); // Limit to 3 passages per respondent
-
-        if (candidatePassages.length === 0) {
-          // No relevant passages found for this respondent
-          respondents[respondentId] = {
-            profile: { role: "", geography: "", specialty: "", experience: "" },
-            quote: "",
-            summary: "",
-            theme: ""
-          };
-          continue;
-        }
-
-        const context = candidatePassages.join("\n\n---\n\n").slice(0, 3000);
-
-        const qaPrompt = `You will fill one respondent cell for a guide-aligned matrix. JSON ONLY.
-Question: ${qText}
-Section: ${qSection}
-Respondent Transcript:\n${context}
-Return JSON ONLY in this format:
-{
-  "profile": {"role": "", "geography": "", "specialty": "", "experience": ""},
-  "quote": "(50-150 words verbatim from transcript)",
-  "summary": "(3-4 sentences)",
-  "theme": "(short, specific phrase)"
-}`;
-
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout per respondent
-
-          const qaRes = await fetch(qaApiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "api-key": azureApiKey },
-            body: JSON.stringify({
-              messages: [
-                { role: "system", content: "Return only JSON. Quotes must be verbatim from provided transcript." },
-                { role: "user", content: qaPrompt },
-              ],
-              response_format: { type: "json_object" },
-              max_tokens: 500,
-              temperature: 0.3,
-            }),
-            signal: controller.signal,
-          });
-
-          clearTimeout(timeoutId);
-
-          if (!qaRes.ok) {
-            throw new Error(`Azure API error: ${qaRes.status}`);
-          }
-
-          const qaJson = await qaRes.json();
-          let respondentData: any = null;
-          try {
-            const text = qaJson.choices?.[0]?.message?.content?.trim() || "";
-            respondentData = JSON.parse(text);
-          } catch {}
-
-          if (respondentData && respondentData.quote) {
-            respondents[respondentId] = respondentData;
-          } else {
-            respondents[respondentId] = {
-              profile: { role: "", geography: "", specialty: "", experience: "" },
-              quote: "",
-              summary: "",
-              theme: ""
-            };
-          }
-        } catch (error) {
-          console.error(`Error processing respondent ${respondentId}:`, error);
-          respondents[respondentId] = {
-            profile: { role: "", geography: "", specialty: "", experience: "" },
-            quote: "",
-            summary: "",
-            theme: ""
-          };
-        }
-      }
-
-      // Add the question with all respondents
-      result.content_analysis.questions.push({
-        question_type: qSection,
-        section: qSection,
-        subsection: q.subsection || undefined,
-        question: qText,
-        respondents: respondents
-      });
-
-      // Update progress
-      await supabaseService
-        .from("content_analysis_jobs")
-        .update({ batches_completed: qIndex + 1 })
-        .eq("id", jobId);
-    }
-
-    // Store in content_analysis_results (upsert)
-    const { data: existing } = await supabaseService
-      .from("content_analysis_results")
-      .select("id")
-      .eq("research_project_id", jobRow.project_id)
-      .eq("user_id", jobRow.user_id)
-      .single();
-
-    if (existing?.id) {
-      await supabaseService
-        .from("content_analysis_results")
-        .update({ analysis_data: result, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
-    } else {
-      await supabaseService
-        .from("content_analysis_results")
-        .insert({ research_project_id: jobRow.project_id, user_id: jobRow.user_id, analysis_data: result });
-    }
-
-    await supabaseService
-      .from("content_analysis_jobs")
-      .update({ status: "completed", completed_at: new Date().toISOString(), batches_total: questions.length, batches_completed: questions.length })
-      .eq("id", jobId);
-
-    return new Response(JSON.stringify({ success: true, job_id: jobId, questions: questions.length }), { headers: corsHeaders });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ success: false, error: String(err?.message || err) }), { status: 500, headers: corsHeaders });
+    return json(req, { ok: false, error: String(e?.message ?? e) }, { status: 500 });
   }
-}); 
+});

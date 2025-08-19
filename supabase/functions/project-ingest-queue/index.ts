@@ -1,19 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Content-Type": "application/json",
-  Vary: "Origin",
-};
+import { buildCorsHeaders, json } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
   // Preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: buildCorsHeaders(req) });
   }
 
   try {
@@ -57,13 +49,7 @@ Deno.serve(async (req) => {
     const { project_id } = body;
 
     if (!project_id) {
-      return new Response(
-        JSON.stringify({ success: false, error: "project_id required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return json(req, { success: false, error: "project_id required" }, { status: 400 });
     }
 
     console.log(`Starting job queue for project: ${project_id}`);
@@ -92,14 +78,11 @@ Deno.serve(async (req) => {
     }
 
     if (!documents || documents.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: "No documents found to process", 
-          jobs_created: 0 
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return json(req, { 
+        success: true, 
+        message: "No documents found to process", 
+        jobs_created: 0 
+      });
     }
 
     // Create or update project metadata
@@ -165,32 +148,21 @@ Deno.serve(async (req) => {
       })
       .eq("project_id", project_id);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: "Ingestion jobs queued successfully",
-        project_id: project_id,
-        jobs_created: jobsCreated,
-        total_documents: documents.length,
-        estimated_completion: estimatedCompletion,
-        metadata_id: metadata?.id,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return json(req, {
+      success: true,
+      message: "Ingestion jobs queued successfully",
+      project_id: project_id,
+      jobs_created: jobsCreated,
+      total_documents: documents.length,
+      estimated_completion: estimatedCompletion,
+      metadata_id: metadata?.id,
+    });
   } catch (err: any) {
     console.error("Error in project-ingest-queue:", err);
     
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: String(err?.message || err || "Internal server error"),
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return json(req, {
+      success: false,
+      error: String(err?.message || err || "Internal server error"),
+    }, { status: 500 });
   }
 }); 
