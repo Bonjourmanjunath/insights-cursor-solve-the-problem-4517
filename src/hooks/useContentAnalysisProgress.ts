@@ -87,32 +87,45 @@ export function useContentAnalysisProgress(projectId: string | null) {
 		console.log("[CA] Starting enqueue for projectId:", projectId);
 		
 		try {
-			// EXTREME DEBUG: Check the string before passing
+			// EXTREME DEBUG: Check what we're sending
 			const functionName = "content-analysis-queue";
 			console.log("[CA-DEBUG] Function name:", functionName);
-			console.log("[CA-DEBUG] Function name length:", functionName.length);
-			console.log("[CA-DEBUG] Character codes:", functionName.split('').map(c => c.charCodeAt(0)));
-			console.log("[CA-DEBUG] Hex:", functionName.split('').map(c => '0x' + c.charCodeAt(0).toString(16)));
+			console.log("[CA-DEBUG] Project ID being sent:", projectId);
+			console.log("[CA-DEBUG] User authenticated?", user ? "Yes" : "No");
+			console.log("[CA-DEBUG] User ID:", user?.id);
+			
+			// Check if user is authenticated
+			const { data: { session } } = await supabase.auth.getSession();
+			console.log("[CA-DEBUG] Session exists?", session ? "Yes" : "No");
+			console.log("[CA-DEBUG] Session token exists?", session?.access_token ? "Yes" : "No");
 			
 			const { data, error } = await supabase.functions.invoke(functionName, {
 				body: { project_id: projectId },
 			});
 			
 			if (error) {
-				console.error("[CA] Queue error:", error);
-				// Handle ReadableStream errors
+				console.error("[CA] Queue error object:", error);
+				console.error("[CA] Error keys:", Object.keys(error));
+				console.error("[CA] Error message:", error.message);
+				console.error("[CA] Error code:", error.code);
+				console.error("[CA] Error status:", error.status);
+				
+				// Try to get the actual error message
 				let errorMessage = "Failed to enqueue content analysis job";
+				
+				// Check various error formats
 				if (error.message) {
 					errorMessage = error.message;
-				} else if (error.raw && typeof error.raw.text === 'function') {
-					try {
-						const text = await error.raw.text();
-						const parsed = JSON.parse(text);
-						errorMessage = parsed.error || parsed.message || errorMessage;
-					} catch (e) {
-						console.error("[CA] Failed to parse error response:", e);
-					}
 				}
+				
+				// If there's a response body, try to read it
+				if (error.details || error.hint || error.code) {
+					errorMessage = `${error.message || errorMessage} (${error.code || 'unknown code'})`;
+					if (error.details) errorMessage += ` - Details: ${error.details}`;
+					if (error.hint) errorMessage += ` - Hint: ${error.hint}`;
+				}
+				
+				console.error("[CA] Final error message:", errorMessage);
 				throw new Error(errorMessage);
 			}
 			

@@ -160,6 +160,9 @@ export default function ContentAnalysis() {
       setProgress(1);
       setCurrentStep("Queuing content analysis job...");
 
+      console.log("[ContentAnalysis] Starting analysis for project:", projectId);
+      console.log("[ContentAnalysis] Project data:", project);
+      
       // Enqueue job
       await ca.enqueue();
 
