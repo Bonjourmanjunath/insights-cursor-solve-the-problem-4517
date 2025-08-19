@@ -605,21 +605,31 @@ export default function Projects() {
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="w-full bg-white hover:bg-indigo-50 border-gray-200 hover:border-indigo-300 text-gray-700 hover:text-indigo-700 font-medium justify-start"
-                          onClick={() =>
-                            navigate(
-                              `/dashboard/projects/${project.id}/analysis/content`,
-                            )
-                          }
+                          variant="default"
+                          className="w-full justify-start"
+                          onClick={() => navigate(`/dashboard/projects/${project.id}/analysis/content`)}
                         >
-                          <FileText className="h-4 w-4 mr-2" />
+                          <FileText className="w-4 h-4 mr-2" />
                           Content Analysis
-                          <span className="ml-auto text-xs text-gray-500">
-                            Guide Matrix
-                          </span>
+                          <Badge variant="secondary" className="ml-auto">Guide Matrix</Badge>
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={() => navigate(`/dashboard/projects/${project.id}/analysis/simple`)}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Discussion Guide Upload
+                          <Badge variant="outline" className="ml-auto">Upload Guide</Badge>
                         </Button>
                       </div>
+                    </div>
+
+                    {/* File Format Guide */}
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      💡 <strong>Tip:</strong> For best parsing results, copy-paste from Word/PDF documents. 
+                      Direct file upload coming soon!
                     </div>
                   </div>
                 </CardContent>

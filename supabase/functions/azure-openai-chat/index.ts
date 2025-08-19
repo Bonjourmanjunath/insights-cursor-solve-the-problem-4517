@@ -8,7 +8,13 @@ const corsHeaders = {
 };
 
 interface ChatRequest {
-  message: string;
+  message?: string;
+  messages?: Array<{
+    role: 'system' | 'user' | 'assistant';
+    content: string;
+  }>;
+  model?: string;
+  temperature?: number;
   project?: any;
   analysis?: {
     dishTable: string;
@@ -28,11 +34,11 @@ serve(async (req) => {
   }
 
   try {
-    const { message, project, analysis, conversationHistory = [] }: ChatRequest = await req.json();
+    const { message, messages, model, temperature, project, analysis, conversationHistory = [] }: ChatRequest = await req.json();
 
-    const AZURE_API_KEY = Deno.env.get('FMR_AZURE_OPENAI_API_KEY');
-    const AZURE_ENDPOINT = Deno.env.get('FMR_AZURE_OPENAI_ENDPOINT');
-    const DEPLOYMENT = "gpt-4.1";
+    const AZURE_API_KEY = Deno.env.get('AZURE_OPENAI_API_KEY') || Deno.env.get('FMR_AZURE_OPENAI_API_KEY');
+    const AZURE_ENDPOINT = Deno.env.get('AZURE_OPENAI_ENDPOINT') || Deno.env.get('FMR_AZURE_OPENAI_ENDPOINT');
+    const DEPLOYMENT = model || "gpt-4.1";
     const API_VERSION = "2025-01-01-preview";
 
     if (!AZURE_API_KEY || !AZURE_ENDPOINT) {
