@@ -22,7 +22,8 @@ import {
   Play,
   Pause,
   Volume2,
-  X
+  X,
+  Edit
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
