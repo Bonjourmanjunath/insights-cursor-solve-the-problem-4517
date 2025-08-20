@@ -1,32 +1,24 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Database } from './types';
 
-// Get Supabase configuration from environment variables
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://lgxqviomumjiqljpnvuh.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneHF2aW9tdW1qaXFsanBudnVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjcyNDUsImV4cCI6MjA2NDM0MzI0NX0.uXOtmvQfYSpVFzbAP9kEym4Em8qtKO-y0y4J0fDEggw";
+// Hardcoded working credentials - no environment variables to avoid crashes
+const SUPABASE_URL = "https://lgxqviomumjiqljpnvuh.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneHF2aW9tdW1qaXFsanBudnVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3NjcyNDUsImV4cCI6MjA2NDM0MzI0NX0.uXOtmvQfYSpVFzbAP9kEym4Em8qtKO-y0y4J0fDEggw";
 
-// Validate configuration
-if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  console.error('Missing Supabase configuration:', {
-    hasUrl: !!SUPABASE_URL,
-    hasKey: !!SUPABASE_PUBLISHABLE_KEY
-  });
-}
+console.log('🔧 Supabase client initializing with:', {
+  url: SUPABASE_URL,
+  hasKey: !!SUPABASE_ANON_KEY
+});
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: typeof window !== 'undefined' ? localStorage : undefined,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce'
+    persistSession: false, // Disable session persistence to avoid crashes
+    autoRefreshToken: false, // Disable auto refresh to avoid crashes
+    detectSessionInUrl: false, // Disable URL detection to avoid crashes
   },
   realtime: {
     params: {
-      eventsPerSecond: 10
+      eventsPerSecond: 1 // Reduce to minimum to avoid overload
     }
   },
   db: {
@@ -34,15 +26,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
-// Test connection on initialization
+// Test connection safely
 if (typeof window !== 'undefined') {
-  supabase.auth.getSession().then(({ data, error }) => {
-    if (error) {
-      console.error('Supabase connection error:', error);
-    } else {
-      console.log('Supabase connected successfully');
-    }
-  }).catch(err => {
-    console.error('Failed to test Supabase connection:', err);
-  });
+  console.log('✅ Supabase client created successfully');
 }

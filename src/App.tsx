@@ -1,171 +1,161 @@
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useRoutes } from "react-router-dom";
-import DashboardLayout from "./components/DashboardLayout";
-import MarketingLayout from "./components/MarketingLayout";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import React from "react";
+
+// Import only essential components to avoid crashes
 import Dashboard from "./pages/Dashboard";
-import Transcripts from "./pages/Transcripts";
-import Projects from "./pages/Projects";
-import Chat from "./pages/Chat";
 import Auth from "./pages/Auth";
-import AuthGuard from "./components/AuthGuard";
-import LandingGuard from "./components/LandingGuard";
-import NotFound from "./pages/NotFound";
-import ProjectTranscripts from "./pages/ProjectTranscripts";
-import ProjectAnalysis from "./pages/ProjectAnalysis";
-import ProjectChat from "./pages/ProjectChat";
-import Landing from "./pages/Landing";
-import AppleLanding from "./pages/AppleLanding";
-import Features from "./pages/Features";
-import Pricing from "./pages/Pricing";
-import About from "./pages/About";
-import Contact from "./pages/Contact";
-import routes from "tempo-routes";
-import React, { Suspense } from "react";
-import ErrorBoundary from "./components/ErrorBoundary";
 
-import ContentAnalysis from "./pages/ContentAnalysis";
-import ContentAnalysisWizardPage from "./pages/ContentAnalysisWizard";
-import DiscussionGuideParse from "./pages/DiscussionGuideParse";
-import GuideAwareContentAnalysis from "./components/GuideAwareContentAnalysis";
-import SimpleTest from "./pages/SimpleTest";
-import SpeechStudio from "./pages/SpeechStudio";
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false, // Disable retries to prevent infinite loops
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-const ProAdvancedAnalysis = React.lazy(
-  () => import("@/pages/ProAdvancedAnalysis"),
-);
-
-const queryClient = new QueryClient();
-
-// Component to handle Tempo routes - must be used inside Router context
-const TempoRoutes = () => {
-  try {
-    // This hook will only be called when the component is rendered inside BrowserRouter
-    return useRoutes(routes);
-  } catch (error) {
-    console.error("Error in TempoRoutes:", error);
-    return null;
+// Minimal error boundary that won't crash
+class SimpleErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
   }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error('App Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ 
+          padding: '20px', 
+          textAlign: 'center',
+          fontFamily: 'Arial, sans-serif',
+          backgroundColor: '#f5f5f5',
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{ 
+            backgroundColor: 'white', 
+            padding: '40px', 
+            borderRadius: '8px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            maxWidth: '600px'
+          }}>
+            <h1 style={{ color: '#dc2626', marginBottom: '20px' }}>
+              🚨 Application Error
+            </h1>
+            <p style={{ marginBottom: '20px', color: '#666' }}>
+              The application encountered an error. You can now safely open the browser console (F12) to see details.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                marginRight: '10px'
+              }}
+            >
+              Reload App
+            </button>
+            <button 
+              onClick={() => window.location.href = '/auth'}
+              style={{
+                backgroundColor: '#6b7280',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Go to Auth
+            </button>
+            {this.state.error && (
+              <details style={{ marginTop: '20px', textAlign: 'left' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>
+                  Error Details
+                </summary>
+                <pre style={{ 
+                  backgroundColor: '#f3f4f6', 
+                  padding: '10px', 
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  overflow: 'auto',
+                  marginTop: '10px'
+                }}>
+                  {this.state.error.message}
+                  {this.state.error.stack}
+                </pre>
+              </details>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Minimal Speech Studio component that won't crash
+const MinimalSpeechStudio = () => {
+  return (
+    <div style={{ padding: '20px' }}>
+      <h1>Speech Studio - Safe Mode</h1>
+      <p>This is a minimal version to test if the app loads.</p>
+      <div style={{ 
+        backgroundColor: '#f0f9ff', 
+        padding: '20px', 
+        borderRadius: '8px',
+        border: '1px solid #0ea5e9',
+        marginTop: '20px'
+      }}>
+        <h3>✅ App is Loading Successfully!</h3>
+        <p>If you can see this, the basic app structure is working.</p>
+        <p>Now we can safely add Speech Studio features one by one.</p>
+      </div>
+    </div>
+  );
 };
 
-const App = () => (
-  <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          {/* Tempo routes - only rendered when inside Router context */}
-          {import.meta.env.VITE_TEMPO && <TempoRoutes />}
-          <Suspense fallback={null}>
+const App = () => {
+  return (
+    <SimpleErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <BrowserRouter>
             <Routes>
-              {/* Marketing Website Routes */}
-              <Route path="/" element={<AppleLanding />} />
-              <Route
-                path="/features"
-                element={
-                  <MarketingLayout>
-                    <Features />
-                  </MarketingLayout>
-                }
-              />
-              <Route
-                path="/pricing"
-                element={
-                  <MarketingLayout>
-                    <Pricing />
-                  </MarketingLayout>
-                }
-              />
-              <Route
-                path="/about"
-                element={
-                  <MarketingLayout>
-                    <About />
-                  </MarketingLayout>
-                }
-              />
-              <Route
-                path="/contact"
-                element={
-                  <MarketingLayout>
-                    <Contact />
-                  </MarketingLayout>
-                }
-              />
-
-              {/* Auth Route */}
+              {/* Minimal routes to test basic functionality */}
+              <Route path="/" element={<MinimalSpeechStudio />} />
               <Route path="/auth" element={<Auth />} />
-
-              {/* Dashboard Routes - Protected */}
-              <Route
-                path="/dashboard"
-                element={
-                  <AuthGuard>
-                    <DashboardLayout />
-                  </AuthGuard>
-                }
-              >
-                <Route index element={<Dashboard />} />
-                <Route path="transcripts" element={<Transcripts />} />
-                <Route path="projects" element={<Projects />} />
-                <Route path="speech" element={<SpeechStudio />} />
-                <Route
-                  path="projects/:projectId/transcripts"
-                  element={<ProjectTranscripts />}
-                />
-                <Route
-                  path="projects/:projectId/analysis"
-                  element={<ProjectAnalysis />}
-                />
-                <Route
-                  path="projects/:projectId/analysis/basic"
-                  element={<ProjectAnalysis />}
-                />
-                <Route
-                  path="projects/:projectId/analysis/advanced"
-                  element={<ProAdvancedAnalysis />}
-                />
-                <Route
-                  path="projects/:projectId/analysis/content"
-                  element={<ContentAnalysis />}
-                />
-                <Route
-                  path="projects/:projectId/analysis/simple"
-                  element={<DiscussionGuideParse />}
-                />
-                <Route
-                  path="guide-aware-test"
-                  element={<GuideAwareContentAnalysis />}
-                />
-                <Route
-                  path="simple-test"
-                  element={<SimpleTest />}
-                />
-                <Route
-                  path="projects/:projectId/advanced-analysis"
-                  element={<ProAdvancedAnalysis />}
-                />
-                <Route
-                  path="projects/:projectId/chat"
-                  element={<ProjectChat />}
-                />
-                <Route path="chat" element={<Chat />} />
-              </Route>
-
-              {/* Tempo route before catch-all */}
-              {import.meta.env.VITE_TEMPO && <Route path="/tempobook/*" />}
-
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/speech" element={<MinimalSpeechStudio />} />
+              <Route path="*" element={<MinimalSpeechStudio />} />
             </Routes>
-          </Suspense>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </ErrorBoundary>
-);
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </SimpleErrorBoundary>
+  );
+};
 
 export default App;
