@@ -506,35 +506,68 @@ ${recording.transcript_text || 'No transcript available'}
         { message: "Finalizing transcript...", progress: 100 }
       ];
 
-      for (const step of steps) {
-        setProcessingProgress(step.progress);
-        await new Promise(resolve => setTimeout(resolve, 1500));
+      // Step 1: Upload file to Supabase storage first
+      console.log('📤 Uploading file to storage...');
+      const fileName = `${Date.now()}-${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('transcripts')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.error('❌ Storage upload failed:', uploadError);
+        throw new Error(`File upload failed: ${uploadError.message}`);
       }
 
-      // Create new recording
+      console.log('✅ File uploaded to storage:', uploadData.path);
+
+      // Step 2: Create transcript record in database
+      const { data: transcript, error: transcriptError } = await supabase
+        .from('transcripts')
+        .insert({
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          storage_path: uploadData.path,
+          status: 'processing',
+          progress: 0,
+          user_id: 'demo-user' // Replace with actual user ID when auth is implemented
+        })
+        .select()
+        .single();
+
+      if (transcriptError) {
+        console.error('❌ Database insert failed:', transcriptError);
+        throw new Error(`Database error: ${transcriptError.message}`);
+      }
+
+      console.log('✅ Transcript record created:', transcript.id);
+
+      // Step 3: Create recording record for UI
       const newRecording = {
-        id: `recording-${Date.now()}`,
-        project_id: selectedProject.id,
-        file_name: `${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${new Date().toTimeString().slice(0, 5).replace(':', '')}.MP4`,
-        duration_seconds: recordingTime,
-        speaker_count: 2,
-        language_detected: selectedProject.language,
-        status: 'completed',
-        confidence_score: 0.85 + Math.random() * 0.1,
+        id: transcript.id,
+        file_name: file.name,
+        project_id: projectId,
+        user_id: 'demo-user',
+        file_size: file.size,
+        language: 'en-US',
+        status: 'processing' as const,
+        duration_seconds: null,
+        speaker_count: null,
+        transcript_text: null,
+        language_detected: null,
+        confidence_score: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        transcript_text: generateDemoTranscript(selectedProject, medicalTerms),
-        display_name: `${selectedProject.name} Recording ${recordings.filter(r => r.project_id === selectedProject.id).length + 1}`,
-        project_number: `${selectedProject.name.substring(0, 4).toUpperCase()}-2025-${String(recordings.length + 1).padStart(3, '0')}`,
-        market: selectedProject.language.includes('es') ? 'Spain' : 'United States',
-        respondent_initials: generateRandomInitials(),
-        specialty: selectedProject.name.includes('Cardiology') ? 'Cardiology' : selectedProject.name.includes('Oncology') ? 'Oncology' : 'Healthcare Professional',
-        interview_date: new Date().toISOString()
       };
 
       setRecordings(prev => [newRecording, ...prev]);
-      
-      // Update project recording count
+
+      // Step 4: Call Azure Speech transcription function with proper parameters
+      console.log('🎤 Starting Azure Speech transcription...');
+
+      setRecordings(prev => [newRecording, ...prev]);
+          transcriptId: transcript.id,
+          filePath: uploadData.path,
       setProjects(prev => prev.map(project => 
         project.id === selectedProject.id 
           ? { ...project, recording_count: project.recording_count + 1 }
@@ -688,8 +721,14 @@ ${recording.transcript_text || 'No transcript available'}
         toast({
           title: "Upload Failed",
           description: `Failed to process ${file.name}`,
-          variant: "destructive",
-        });
+        console.error('❌ Azure Speech transcription failed:', error);
+        // Update transcript status to error
+        await supabase
+          .from('transcripts')
+          .update({ status: 'error' })
+          .eq('id', transcript.id);
+        
+        throw new Error(`Azure Speech transcription failed: ${error.message}`);
       }
     }
 
@@ -706,28 +745,32 @@ ${recording.transcript_text || 'No transcript available'}
     } else if (project.name.includes('Oncology')) {
       return `I: Thank you for joining us today. Can you share your experience with cancer treatment? R: Thank you for having me. The journey has been challenging but I've learned so much about managing my condition. I: What has been most helpful in your treatment process? R: Having a coordinated care team has been essential. They helped me understand my options and supported me through each step of the treatment.`;
     } else {
-      return `I: Thank you for participating in this research interview. Can you tell me about your professional background? R: Thank you for having me. I work in healthcare and have been involved in ${medicalTerm} for several years. I: What are the main challenges you face in your practice? R: The main challenges include staying current with new treatments and ensuring patients receive the best possible care.`;
+      console.log('✅ Azure Speech transcription response:', data);
     }
+      // Step 5: Update UI with transcription results
+      if (data.success) {
+        const updatedRecording = {
+          ...newRecording,
+          status: 'completed' as const,
+          transcript_text: data.text || 'Transcription completed',
+          language_detected: data.language || 'en-US',
+          confidence_score: data.confidence || 0.95,
+          duration_seconds: data.duration || null,
+          updated_at: new Date().toISOString(),
+        };
   };
-
-  // Generate random initials
-  const generateRandomInitials = () => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numbers = '0123456789';
-    return letters[Math.floor(Math.random() * letters.length)] + 
-           letters[Math.floor(Math.random() * letters.length)] + 
-           numbers[Math.floor(Math.random() * numbers.length)] + 
-           numbers[Math.floor(Math.random() * numbers.length)];
-  };
-
-  // Create new project
-  const createProject = async () => {
+        setRecordings(prev => 
+          prev.map(r => r.id === transcript.id ? updatedRecording : r)
+        );
     if (!newProjectForm.name.trim()) {
-      toast({
         title: "Name Required",
-        description: "Please enter a project name",
-        variant: "destructive",
-      });
+        toast({
+          title: "Transcription Successful",
+          description: `${file.name} transcribed successfully with Azure Speech Services`,
+        });
+      } else {
+        throw new Error(data.error || 'Transcription failed');
+      }
       return;
     }
 
@@ -775,7 +818,7 @@ ${recording.transcript_text || 'No transcript available'}
   const getStatusColor = (status) => {
     switch (status) {
       case 'completed': return 'default';
-      case 'processing': return 'secondary';
+        description: error instanceof Error ? error.message : "Failed to upload and transcribe file",
       case 'error': return 'destructive';
       default: return 'outline';
     }
