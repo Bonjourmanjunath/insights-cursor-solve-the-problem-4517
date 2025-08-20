@@ -24,6 +24,7 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import routes from "tempo-routes";
 import React, { Suspense } from "react";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 import ContentAnalysis from "./pages/ContentAnalysis";
 import ContentAnalysisWizardPage from "./pages/ContentAnalysisWizard";
@@ -50,119 +51,121 @@ const TempoRoutes = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        {/* Tempo routes - only rendered when inside Router context */}
-        {import.meta.env.VITE_TEMPO && <TempoRoutes />}
-        <Suspense fallback={null}>
-          <Routes>
-            {/* Marketing Website Routes */}
-            <Route path="/" element={<AppleLanding />} />
-            <Route
-              path="/features"
-              element={
-                <MarketingLayout>
-                  <Features />
-                </MarketingLayout>
-              }
-            />
-            <Route
-              path="/pricing"
-              element={
-                <MarketingLayout>
-                  <Pricing />
-                </MarketingLayout>
-              }
-            />
-            <Route
-              path="/about"
-              element={
-                <MarketingLayout>
-                  <About />
-                </MarketingLayout>
-              }
-            />
-            <Route
-              path="/contact"
-              element={
-                <MarketingLayout>
-                  <Contact />
-                </MarketingLayout>
-              }
-            />
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          {/* Tempo routes - only rendered when inside Router context */}
+          {import.meta.env.VITE_TEMPO && <TempoRoutes />}
+          <Suspense fallback={null}>
+            <Routes>
+              {/* Marketing Website Routes */}
+              <Route path="/" element={<AppleLanding />} />
+              <Route
+                path="/features"
+                element={
+                  <MarketingLayout>
+                    <Features />
+                  </MarketingLayout>
+                }
+              />
+              <Route
+                path="/pricing"
+                element={
+                  <MarketingLayout>
+                    <Pricing />
+                  </MarketingLayout>
+                }
+              />
+              <Route
+                path="/about"
+                element={
+                  <MarketingLayout>
+                    <About />
+                  </MarketingLayout>
+                }
+              />
+              <Route
+                path="/contact"
+                element={
+                  <MarketingLayout>
+                    <Contact />
+                  </MarketingLayout>
+                }
+              />
 
-            {/* Auth Route */}
-            <Route path="/auth" element={<Auth />} />
+              {/* Auth Route */}
+              <Route path="/auth" element={<Auth />} />
 
-            {/* Dashboard Routes - Protected */}
-            <Route
-              path="/dashboard"
-              element={
-                <AuthGuard>
-                  <DashboardLayout />
-                </AuthGuard>
-              }
-            >
-              <Route index element={<Dashboard />} />
-              <Route path="transcripts" element={<Transcripts />} />
-              <Route path="projects" element={<Projects />} />
-              <Route path="speech" element={<SpeechStudio />} />
+              {/* Dashboard Routes - Protected */}
               <Route
-                path="projects/:projectId/transcripts"
-                element={<ProjectTranscripts />}
-              />
-              <Route
-                path="projects/:projectId/analysis"
-                element={<ProjectAnalysis />}
-              />
-              <Route
-                path="projects/:projectId/analysis/basic"
-                element={<ProjectAnalysis />}
-              />
-              <Route
-                path="projects/:projectId/analysis/advanced"
-                element={<ProAdvancedAnalysis />}
-              />
-              <Route
-                path="projects/:projectId/analysis/content"
-                element={<ContentAnalysis />}
-              />
-              <Route
-                path="projects/:projectId/analysis/simple"
-                element={<DiscussionGuideParse />}
-              />
-              <Route
-                path="guide-aware-test"
-                element={<GuideAwareContentAnalysis />}
-              />
-              <Route
-                path="simple-test"
-                element={<SimpleTest />}
-              />
-              <Route
-                path="projects/:projectId/advanced-analysis"
-                element={<ProAdvancedAnalysis />}
-              />
-              <Route
-                path="projects/:projectId/chat"
-                element={<ProjectChat />}
-              />
-              <Route path="chat" element={<Chat />} />
-            </Route>
+                path="/dashboard"
+                element={
+                  <AuthGuard>
+                    <DashboardLayout />
+                  </AuthGuard>
+                }
+              >
+                <Route index element={<Dashboard />} />
+                <Route path="transcripts" element={<Transcripts />} />
+                <Route path="projects" element={<Projects />} />
+                <Route path="speech" element={<SpeechStudio />} />
+                <Route
+                  path="projects/:projectId/transcripts"
+                  element={<ProjectTranscripts />}
+                />
+                <Route
+                  path="projects/:projectId/analysis"
+                  element={<ProjectAnalysis />}
+                />
+                <Route
+                  path="projects/:projectId/analysis/basic"
+                  element={<ProjectAnalysis />}
+                />
+                <Route
+                  path="projects/:projectId/analysis/advanced"
+                  element={<ProAdvancedAnalysis />}
+                />
+                <Route
+                  path="projects/:projectId/analysis/content"
+                  element={<ContentAnalysis />}
+                />
+                <Route
+                  path="projects/:projectId/analysis/simple"
+                  element={<DiscussionGuideParse />}
+                />
+                <Route
+                  path="guide-aware-test"
+                  element={<GuideAwareContentAnalysis />}
+                />
+                <Route
+                  path="simple-test"
+                  element={<SimpleTest />}
+                />
+                <Route
+                  path="projects/:projectId/advanced-analysis"
+                  element={<ProAdvancedAnalysis />}
+                />
+                <Route
+                  path="projects/:projectId/chat"
+                  element={<ProjectChat />}
+                />
+                <Route path="chat" element={<Chat />} />
+              </Route>
 
-            {/* Tempo route before catch-all */}
-            {import.meta.env.VITE_TEMPO && <Route path="/tempobook/*" />}
+              {/* Tempo route before catch-all */}
+              {import.meta.env.VITE_TEMPO && <Route path="/tempobook/*" />}
 
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
