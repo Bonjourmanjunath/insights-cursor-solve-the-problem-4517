@@ -22,6 +22,7 @@ import {
   Play,
   Pause,
   Volume2,
+  Download,
   X,
   Edit
 } from "lucide-react";
