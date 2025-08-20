@@ -593,18 +593,19 @@ ${recording.transcript_text || 'No transcript available'}
         }
 
         // Create new recording from uploaded file
+        const recordingId = `recording-${Date.now()}`;
         const newRecording = {
-          id: `recording-${Date.now()}`,
+          id: recordingId,
           project_id: selectedProject.id,
           file_name: file.name,
           duration_seconds: Math.floor(Math.random() * 3600) + 600, // 10-70 minutes
           speaker_count: 2,
           language_detected: selectedProject.language,
-          status: 'completed',
+          status: 'processing',
           confidence_score: 0.85 + Math.random() * 0.1,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          transcript_text: generateDemoTranscript(selectedProject, medicalTerms),
+          transcript_text: 'Processing...',
           display_name: file.name.replace(/\.[^/.]+$/, ''),
           project_number: `${selectedProject.name.substring(0, 4).toUpperCase()}-2025-${String(recordings.length + 1).padStart(3, '0')}`,
           market: selectedProject.language.includes('es') ? 'Spain' : 'United States',
@@ -613,9 +614,60 @@ ${recording.transcript_text || 'No transcript available'}
           interview_date: new Date().toISOString()
         };
 
-        console.log('File processed successfully:', newRecording);
-
         setRecordings(prev => [newRecording, ...prev]);
+
+        // Call Azure Speech Services for actual transcription
+        try {
+          const { data, error } = await supabase.functions.invoke('azure-speech-transcribe', {
+            body: {
+              transcriptId: recordingId,
+              filePath: `${user?.id}/${Date.now()}-${file.name}`,
+              language: 'auto', // Auto-detect language
+              medicalTerms: medicalTerms
+            }
+          });
+
+          if (error) {
+            throw new Error(`Transcription failed: ${error.message}`);
+          }
+
+          if (!data?.success) {
+            throw new Error(data?.error || 'Transcription service failed');
+          }
+
+          // Use actual transcription result
+          const actualTranscript = data.text || data.transcript_text || 'Transcription failed - no content received';
+          
+          console.log('Actual transcription received:', actualTranscript.substring(0, 200) + '...');
+          
+          // Update recording with actual transcription
+          const updatedRecording = {
+            ...newRecording,
+            transcript_text: actualTranscript,
+            language_detected: data.language || 'auto',
+            confidence_score: data.confidence || 0.95,
+            status: 'completed'
+          };
+
+          setRecordings(prev => prev.map(r => r.id === recordingId ? updatedRecording : r));
+          
+        } catch (transcriptionError) {
+          console.error('Transcription error:', transcriptionError);
+          
+          // Fallback: mark as failed
+          const failedRecording = {
+            ...newRecording,
+            transcript_text: `Transcription failed: ${transcriptionError.message}. Please try again or contact support.`,
+            status: 'error',
+            confidence_score: 0
+          };
+
+          setRecordings(prev => prev.map(r => r.id === recordingId ? failedRecording : r));
+          
+          throw transcriptionError;
+        }
+
+        console.log('File processed successfully:', newRecording);
         
         // Update project recording count
         setProjects(prev => prev.map(project => 
