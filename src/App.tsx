@@ -7,6 +7,15 @@ import React from "react";
 // Import only essential components to avoid crashes
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
+import Projects from "./pages/Projects";
+import Transcripts from "./pages/Transcripts";
+import ProjectAnalysis from "./pages/ProjectAnalysis";
+import ContentAnalysis from "./pages/ContentAnalysis";
+import ProAdvancedAnalysis from "./pages/ProAdvancedAnalysis";
+import ProjectChat from "./pages/ProjectChat";
+import ProjectTranscripts from "./pages/ProjectTranscripts";
+import DashboardLayout from "./components/DashboardLayout";
+import AuthGuard from "./components/AuthGuard";
 import SpeechStudio from "./pages/SpeechStudio";
 
 const queryClient = new QueryClient({
@@ -127,7 +136,20 @@ const App = () => {
             <Routes>
               <Route path="/" element={<SpeechStudio />} />
               <Route path="/auth" element={<Auth />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard" element={
+                <AuthGuard>
+                  <DashboardLayout />
+                </AuthGuard>
+              }>
+                <Route index element={<Dashboard />} />
+                <Route path="projects" element={<Projects />} />
+                <Route path="projects/:projectId/transcripts" element={<ProjectTranscripts />} />
+                <Route path="projects/:projectId/analysis" element={<ProjectAnalysis />} />
+                <Route path="projects/:projectId/analysis/content" element={<ContentAnalysis />} />
+                <Route path="projects/:projectId/pro-advanced-analysis" element={<ProAdvancedAnalysis />} />
+                <Route path="projects/:projectId/chat" element={<ProjectChat />} />
+                <Route path="transcripts" element={<Transcripts />} />
+              </Route>
               <Route path="/speech" element={<SpeechStudio />} />
               <Route path="*" element={<SpeechStudio />} />
             </Routes>
