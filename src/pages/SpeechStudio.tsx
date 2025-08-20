@@ -73,6 +73,15 @@ export default function SpeechStudio() {
   const [recordedBlob, setRecordedBlob] = useState(null);
   const [uploadProgress, setUploadProgress] = useState({});
   const [processingFiles, setProcessingFiles] = useState(new Set());
+  const [editingRecording, setEditingRecording] = useState(null);
+  const [editForm, setEditForm] = useState({
+    display_name: '',
+    project_number: '',
+    market: '',
+    respondent_initials: '',
+    specialty: '',
+    interview_date: ''
+  });
 
   // Add authentication check
   const [user, setUser] = useState(null);
@@ -847,12 +856,22 @@ R: My healthcare team was very supportive. They explained the different ${medica
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <h4 className="font-semibold">{recording.file_name}</h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold">{recording.display_name || recording.file_name}</h4>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingRecording(recording)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                          </div>
                           <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
                             <span>Duration: {Math.floor(recording.duration_seconds / 60)}:{(recording.duration_seconds % 60).toString().padStart(2, '0')}</span>
                             <span>Speakers: {recording.speaker_count}</span>
                             <span>Language: {recording.language_detected}</span>
-                            <span>Quality: Enterprise</span>
+                            <span>Quality: {Math.round(recording.confidence_score * 100)}%</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -860,13 +879,29 @@ R: My healthcare team was very supportive. They explained the different ${medica
                             <CheckCircle className="h-3 w-3 mr-1" />
                             {recording.status}
                           </Badge>
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             variant="outline"
-                            onClick={() => toast({ title: "Playing", description: `Playing ${recording.file_name}` })}
+                            onClick={() => exportTranscript(recording, 'pdf')}
                           >
-                            <Play className="h-4 w-4 mr-1" />
-                            Play
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => exportTranscript(recording, 'docx')}
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Word
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => exportTranscript(recording, 'txt')}
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            Text
                           </Button>
                         </div>
                       </div>
