@@ -115,30 +115,106 @@ Deno.serve(async (req) => {
     }
 
     // Simulate transcription processing (replace with actual Azure Speech Services)
-    console.log('Simulating transcription processing...');
+    console.log('Starting real Azure Speech Services transcription...');
     
-    // For now, create a mock transcript based on file name and medical terms
-    const mockTranscript = `I: Good morning, thank you for joining us today. Can you tell me about your experience with ${medical_terms.length > 0 ? medical_terms[0] : 'your condition'}?
+    // Get Azure Speech Services credentials
+    const azureApiKey = Deno.env.get('AZURE_SPEECH_API_KEY');
+    const azureEndpoint = Deno.env.get('AZURE_SPEECH_ENDPOINT') || 'https://francecentral.api.cognitive.microsoft.com';
+    const azureRegion = Deno.env.get('AZURE_SPEECH_REGION') || 'francecentral';
 
-R: Good morning. Thank you for having me. I've been dealing with this condition for about two years now. Initially, it was quite challenging to understand all the medical terminology and treatment options.
+    if (!azureApiKey) {
+      throw new Error('Azure Speech API key not configured');
+    }
 
-I: How has your treatment journey been so far?
+    // Convert base64 to blob for Azure API
+    const audioBuffer = Uint8Array.from(atob(audio_data), c => c.charCodeAt(0));
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/mp4' });
 
-R: It's been a learning process. Working with my healthcare team has been essential. The ${medical_terms.length > 1 ? medical_terms[1] : 'medication'} they prescribed has helped significantly, though there were some initial side effects to manage.
+    // Prepare form data for Azure Speech API
+    const formData = new FormData();
+    formData.append('file', audioBlob, file_name);
+    formData.append('model', 'whisper-1');
+    
+    if (language && language !== 'auto') {
+      formData.append('language', language);
+    }
 
-I: What would you say has been most helpful in managing your condition?
+    // Add medical terms as custom vocabulary if provided
+    if (medical_terms && medical_terms.length > 0) {
+      formData.append('custom_vocabulary', JSON.stringify(medical_terms));
+    }
 
-R: I think the combination of proper medication, lifestyle changes, and having a supportive medical team has made the biggest difference. Understanding my condition better has also helped me make informed decisions about my care.`;
+    // Call Azure Speech Services API
+    const speechApiUrl = `${azureEndpoint}/speechtotext/v3.1/transcriptions:transcribe`;
+    
+    const azureResponse = await fetch(speechApiUrl, {
+      method: 'POST',
+      headers: {
+        'Ocp-Apim-Subscription-Key': azureApiKey,
+      },
+      body: formData
+    });
 
-    // Update recording with mock results
+    if (!azureResponse.ok) {
+      const errorText = await azureResponse.text();
+      console.error('Azure Speech API error:', errorText);
+      throw new Error(`Azure Speech API error: ${azureResponse.status} - ${errorText}`);
+    }
+
+    const azureResult = await azureResponse.json();
+    const transcriptText = azureResult.text || azureResult.displayText || '';
+    const detectedLanguage = azureResult.language || language || 'en-US';
+    const confidence = azureResult.confidence || 0.9;
+    const duration = azureResult.duration || estimatedSize / 16000; // Rough estimate
+
+    // Format transcript in I:/R: format using Azure OpenAI
+    let formattedTranscript = transcriptText;
+    
+    try {
+      const azureOpenAIKey = Deno.env.get('FMR_AZURE_OPENAI_API_KEY');
+      const azureOpenAIEndpoint = Deno.env.get('FMR_AZURE_OPENAI_ENDPOINT');
+      
+      if (azureOpenAIKey && azureOpenAIEndpoint) {
+        const formatResponse = await fetch(`${azureOpenAIEndpoint}/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': azureOpenAIKey,
+          },
+          body: JSON.stringify({
+            messages: [
+              {
+                role: 'system',
+                content: 'You are formatting a transcript into I:/R: format. I: for Interviewer/Moderator, R: for Respondent/Participant. Each speaker should be on a new line. Preserve the exact content and meaning.'
+              },
+              {
+                role: 'user',
+                content: `Format this transcript into I:/R: format:\n\n${transcriptText}`
+              }
+            ],
+            max_tokens: 4000,
+            temperature: 0.1
+          })
+        });
+
+        if (formatResponse.ok) {
+          const formatResult = await formatResponse.json();
+          formattedTranscript = formatResult.choices[0]?.message?.content || transcriptText;
+        }
+      }
+    } catch (formatError) {
+      console.warn('Failed to format transcript, using raw transcription:', formatError);
+    }
+
+    // Update recording with real results
     const { data: updatedRecording, error: updateError } = await supabaseService
       .from('speech_recordings')
       .update({
-        transcript_text: mockTranscript,
-        language_detected: language,
-        confidence_score: 0.92,
-        duration_seconds: 180, // 3 minutes
-        speaker_count: 2,
+        transcript_text: formattedTranscript,
+        language_detected: detectedLanguage,
+        confidence_score: confidence,
+        duration_seconds: Math.round(duration),
+        speaker_count: 2, // Assume interviewer + respondent
         status: 'completed',
         updated_at: new Date().toISOString()
       })
@@ -163,17 +239,17 @@ R: I think the combination of proper medication, lifestyle changes, and having a
       })
       .eq('id', project_id);
 
-    console.log('Transcription completed successfully');
+    console.log('Real Azure Speech transcription completed successfully');
 
     return new Response(
       JSON.stringify({
         success: true,
         recording: updatedRecording,
         transcription: {
-          text: mockTranscript,
-          language: language,
-          confidence: 0.92,
-          duration: 180,
+          text: formattedTranscript,
+          language: detectedLanguage,
+          confidence: confidence,
+          duration: Math.round(duration),
           speakers: 2
         },
         performance: {

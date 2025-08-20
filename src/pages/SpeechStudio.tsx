@@ -138,7 +138,6 @@ export default function SpeechStudio() {
   const [activeTab, setActiveTab] = useState('record');
   
   // Recording state
-  const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -175,10 +174,59 @@ export default function SpeechStudio() {
 
   // Load demo data
   useEffect(() => {
-    console.log('Demo projects loaded successfully');
-    console.log('Demo medical terms loaded successfully');
-    console.log('Demo recordings loaded successfully');
+    loadRealData();
   }, []);
+
+  const loadRealData = async () => {
+    if (!user) return;
+    
+    try {
+      // Load real projects from database
+      const { data: projectsData, error: projectsError } = await supabase
+        .from('speech_projects')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (projectsError) {
+        console.error('Error loading projects:', projectsError);
+      } else {
+        setProjects(projectsData || []);
+        if (projectsData && projectsData.length > 0) {
+          setSelectedProject(projectsData[0].id);
+        }
+      }
+
+      // Load real medical terms from database
+      const { data: termsData, error: termsError } = await supabase
+        .from('medical_dictionaries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('term', { ascending: true });
+
+      if (termsError) {
+        console.error('Error loading medical terms:', termsError);
+      } else {
+        setMedicalTerms(termsData || []);
+      }
+
+      // Load real recordings from database
+      const { data: recordingsData, error: recordingsError } = await supabase
+        .from('speech_recordings')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (recordingsError) {
+        console.error('Error loading recordings:', recordingsError);
+      } else {
+        setRecordings(recordingsData || []);
+      }
+
+    } catch (error) {
+      console.error('Error loading real data:', error);
+    }
+  };
 
   // Generate random initials helper
   const generateRandomInitials = () => {
@@ -604,45 +652,63 @@ ${recording.transcript_text || 'No transcript available'}
 
     for (const file of files) {
       try {
-        console.log('Processing file:', file.name);
-        console.log('Project:', selectedProject.name);
-        console.log('Medical terms:', medicalTerms.length);
+        setProcessingFiles(prev => new Set([...prev, file.name]));
+        
+        // Upload file to Supabase storage
+        const fileName = `${user?.id}/${Date.now()}-${file.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('speech-recordings')
+          .upload(fileName, file);
 
-        newProgress[file.name] = 0;
-        setUploadProgress({ ...newProgress });
-
-        // Simulate upload progress
-        for (let progress = 0; progress <= 100; progress += 20) {
-          newProgress[file.name] = progress;
-          setUploadProgress({ ...newProgress });
-          await new Promise(resolve => setTimeout(resolve, 300));
+        if (uploadError) {
+          throw new Error(`Upload failed: ${uploadError.message}`);
         }
 
-        // Create new recording from uploaded file
-        const recordingId = `recording-${Date.now()}`;
-        const newRecording = {
-          id: recordingId,
-          project_id: selectedProject.id,
-          file_name: file.name,
-          duration_seconds: Math.floor(Math.random() * 3600) + 600, // 10-70 minutes
-          speaker_count: 2,
-          language_detected: selectedProject.language,
-          status: 'completed',
-          confidence_score: 0.85 + Math.random() * 0.1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          transcript_text: generateDemoTranscript(selectedProject, medicalTerms),
-          display_name: file.name.replace(/\.[^/.]+$/, ''),
-          project_number: `${selectedProject.name.substring(0, 4).toUpperCase()}-2025-${String(recordings.length + 1).padStart(3, '0')}`,
-          market: selectedProject.language.includes('es') ? 'Spain' : 'United States',
-          respondent_initials: generateRandomInitials(),
-          specialty: selectedProject.name.includes('Cardiology') ? 'Cardiology' : selectedProject.name.includes('Oncology') ? 'Oncology' : 'Healthcare Professional',
-          interview_date: new Date().toISOString()
-        };
+        // Create recording record in database
+        const { data: recordingData, error: recordingError } = await supabase
+          .from('speech_recordings')
+          .insert({
+            project_id: selectedProject,
+            user_id: user?.id,
+            file_name: file.name,
+            file_size: file.size,
+            language: selectedLanguage,
+            status: 'processing'
+          })
+          .select()
+          .single();
 
-        setRecordings(prev => [newRecording, ...prev]);
+        if (recordingError) {
+          throw new Error(`Failed to create recording: ${recordingError.message}`);
+        }
 
-        console.log('File processed successfully:', newRecording);
+        // Add to recordings list
+        setRecordings(prev => [recordingData, ...prev]);
+
+        // Get medical terms for this recording to improve transcription accuracy
+        const recordingMedicalTerms = medicalTerms.map(term => term.term);
+
+        // Call Azure Speech Services for real transcription
+        const { data: transcriptionData, error: transcriptionError } = await supabase.functions.invoke('speech-transcriber', {
+          body: {
+            project_id: selectedProject,
+            file_name: file.name,
+            audio_data: await fileToBase64(file),
+            language: selectedLanguage,
+            medical_terms: recordingMedicalTerms
+          }
+        });
+
+        if (transcriptionError || !transcriptionData?.success) {
+          throw new Error(`Transcription failed: ${transcriptionError?.message || transcriptionData?.error || 'Unknown error'}`);
+        }
+
+        // Update recordings list with completed transcription
+        setRecordings(prev => 
+          prev.map(r => r.id === recordingData.id ? transcriptionData.recording : r)
+        );
+
+        console.log('Real transcription completed:', transcriptionData.recording);
         
         // Update project recording count
         setProjects(prev => prev.map(project => 
@@ -743,6 +809,42 @@ ${recording.transcript_text || 'No transcript available'}
       case 'processing': return 'outline';
       case 'error': return 'destructive';
       default: return 'outline';
+    }
+  };
+
+  const exportTranscript = async (recording: Recording, format: 'pdf' | 'docx' | 'txt') => {
+    try {
+      const { data, error } = await supabase.functions.invoke('export-transcript', {
+        body: {
+          recording_id: recording.id,
+          format: format
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Create download link
+      const blob = new Blob([data.content], { type: data.mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Export Complete",
+        description: `Transcript exported as ${format.toUpperCase()}`,
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to export transcript",
+        variant: "destructive",
+      });
     }
   };
 
