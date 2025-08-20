@@ -7,6 +7,7 @@ import React from "react";
 // Import only essential components to avoid crashes
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
+import SpeechStudio from "./pages/SpeechStudio";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -115,26 +116,6 @@ class SimpleErrorBoundary extends React.Component<
   }
 }
 
-// Minimal Speech Studio component that won't crash
-const MinimalSpeechStudio = () => {
-  return (
-    <div style={{ padding: '20px' }}>
-      <h1>Speech Studio - Safe Mode</h1>
-      <p>This is a minimal version to test if the app loads.</p>
-      <div style={{ 
-        backgroundColor: '#f0f9ff', 
-        padding: '20px', 
-        borderRadius: '8px',
-        border: '1px solid #0ea5e9',
-        marginTop: '20px'
-      }}>
-        <h3>✅ App is Loading Successfully!</h3>
-        <p>If you can see this, the basic app structure is working.</p>
-        <p>Now we can safely add Speech Studio features one by one.</p>
-      </div>
-    </div>
-  );
-};
 
 const App = () => {
   return (
@@ -144,12 +125,11 @@ const App = () => {
           <Toaster />
           <BrowserRouter>
             <Routes>
-              {/* Minimal routes to test basic functionality */}
-              <Route path="/" element={<MinimalSpeechStudio />} />
+              <Route path="/" element={<SpeechStudio />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/speech" element={<MinimalSpeechStudio />} />
-              <Route path="*" element={<MinimalSpeechStudio />} />
+              <Route path="/speech" element={<SpeechStudio />} />
+              <Route path="*" element={<SpeechStudio />} />
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
