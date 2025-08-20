@@ -30,6 +30,9 @@ import ContentAnalysisWizardPage from "./pages/ContentAnalysisWizard";
 import DiscussionGuideParse from "./pages/DiscussionGuideParse";
 import GuideAwareContentAnalysis from "./components/GuideAwareContentAnalysis";
 import SimpleTest from "./pages/SimpleTest";
+import SpeechProjects from "./pages/SpeechProjects";
+import SpeechUpload from "./pages/SpeechUpload";
+import SpeechRecordings from "./pages/SpeechRecordings";
 
 const ProAdvancedAnalysis = React.lazy(
   () => import("@/pages/ProAdvancedAnalysis"),
@@ -149,6 +152,11 @@ const App = () => (
                 element={<ProjectChat />}
               />
               <Route path="chat" element={<Chat />} />
+              
+              {/* Speech Routes */}
+              <Route path="speech" element={<SpeechProjects />} />
+              <Route path="speech/:projectId/upload" element={<SpeechUpload />} />
+              <Route path="speech/:projectId/recordings" element={<SpeechRecordings />} />
             </Route>
 
             {/* Tempo route before catch-all */}

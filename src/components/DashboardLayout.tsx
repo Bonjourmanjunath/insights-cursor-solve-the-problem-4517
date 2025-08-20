@@ -6,7 +6,8 @@ import {
   FolderOpen, 
   Menu,
   X,
-  LogOut
+  LogOut,
+  Mic
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
@@ -15,6 +16,7 @@ const sidebarItems = [
   { icon: BarChart3, label: 'Dashboard', href: '/dashboard' },
   { icon: FileText, label: 'Transcripts', href: '/dashboard/transcripts' },
   { icon: FolderOpen, label: 'Projects', href: '/dashboard/projects' },
+  { icon: Mic, label: 'Speech', href: '/dashboard/speech' },
 ];
 
 export default function DashboardLayout() {
@@ -59,7 +61,8 @@ export default function DashboardLayout() {
             <nav className="flex-1 px-4 py-6 space-y-2">
               {sidebarItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname === item.href;
+                const isActive = location.pathname === item.href || 
+                               (item.href === '/dashboard/speech' && location.pathname.startsWith('/dashboard/speech'));
                 
                 return (
                   <Link
