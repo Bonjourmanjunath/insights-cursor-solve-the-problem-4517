@@ -86,14 +86,14 @@ export default function SpeechStudio() {
   const checkAuth = async () => {
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
-      if (error) {
+      if (error && error.message !== 'Auth session missing!') {
         console.error('Auth error:', error);
-        // Create a demo user for testing
-        setUser({ id: 'demo-user-123', email: 'demo@fmr.com' });
-      } else if (user) {
+      }
+      
+      if (user) {
         setUser(user);
       } else {
-        // No user, create demo user
+        // No user or session missing, create demo user
         setUser({ id: 'demo-user-123', email: 'demo@fmr.com' });
       }
     } catch (error) {
