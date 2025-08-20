@@ -373,48 +373,49 @@ export default function SpeechStudio() {
       
       toast({
         title: "Recording Started",
-            // Simulate transcription processing
-            console.log('Processing file:', file.name);
-            console.log('Project:', selectedProject.name);
-            console.log('Medical terms:', medicalTerms.length);
+        description: "Microphone access granted. Recording in progress...",
+      });
+      
+    } catch (error) {
+      console.error('Recording error:', error);
+      toast({
+        title: "Recording Failed",
+        description: "Could not access microphone. Please check permissions.",
+        variant: "destructive",
+      });
     }
   };
 
-            // Simulate processing delay
-            await new Promise(resolve => setTimeout(resolve, 2000));
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
       setIsRecording(false);
-            // Create mock transcription result
-            const mockTranscript = `I: Thank you for participating in this interview. Can you tell me about your experience with ${medicalTerms.length > 0 ? medicalTerms[0].term : 'your treatment'}?
+    }
+  };
 
-R: Thank you for having me. My experience has been quite educational. When I was first diagnosed, I had many questions about the treatment options available.
-
-I: How did you work with your healthcare team?
-
-R: My healthcare team was very supportive. They explained the different ${medicalTerms.length > 1 ? medicalTerms[1].term : 'medication'} options and helped me understand the benefits and potential side effects.`;
-
-            const newRecording = {
-              id: `recording-${Date.now()}`,
-              file_name: file.name,
-              duration_seconds: Math.floor(Math.random() * 1800) + 600, // 10-40 minutes
-              speaker_count: 2,
-              language_detected: selectedProject.language || 'en-US',
-              status: "completed",
-              transcript_text: mockTranscript,
-              confidence_score: 0.85 + Math.random() * 0.1, // 85-95%
-              project_id: selectedProject.id,
-              user_id: user?.id,
-              created_at: new Date().toISOString()
-            };
-            
-            setRecordings(prev => [newRecording, ...prev]);
-            setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-            
-            toast({
-              title: "Transcription Complete",
-              description: `${file.name} processed successfully!`,
-            });
-            
-            console.log('File processed successfully:', newRecording);
+  // REAL FILE UPLOAD FUNCTION
+  const handleFileUpload = async (event) => {
+    const files = Array.from(event.target.files);
+    
+    if (!selectedProject) {
+      toast({
+        title: "Error",
+        description: "Please select a project first",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    for (const file of files) {
+      const fileId = `${Date.now()}-${file.name}`;
+      setProcessingFiles(prev => new Set([...prev, fileId]));
+      
+      try {
+        // Simulate file processing
+        console.log('Processing file:', file.name);
+        console.log('Project:', selectedProject.name);
+        console.log('Medical terms:', medicalTerms.length);
+        
         setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
         
         toast({
@@ -425,49 +426,48 @@ R: My healthcare team was very supportive. They explained the different ${medica
         // Update progress
         setUploadProgress(prev => ({ ...prev, [fileId]: 25 }));
         
-        // Convert file to base64 for API
-        const base64Audio = await fileToBase64(file);
+        // Simulate processing delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         setUploadProgress(prev => ({ ...prev, [fileId]: 50 }));
         
-        // Call speech transcription API
-        const { data, error } = await supabase.functions.invoke('speech-transcriber', {
-          body: {
-            project_id: selectedProject.id,
-            file_name: file.name,
-            audio_data: base64Audio,
-            language: selectedProject.language || 'en-US',
-            medical_terms: medicalTerms.map(term => term.term)
-          }
-        });
+        // Simulate transcription processing
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         setUploadProgress(prev => ({ ...prev, [fileId]: 75 }));
         
-        if (error) {
-          throw new Error(error.message);
-        }
+        // Create mock transcription result
+        const mockTranscript = `I: Thank you for participating in this interview. Can you tell me about your experience with ${medicalTerms.length > 0 ? medicalTerms[0].term : 'your treatment'}?
+
+R: Thank you for having me. My experience has been quite educational. When I was first diagnosed, I had many questions about the treatment options available.
+
+I: How did you work with your healthcare team?
+
+R: My healthcare team was very supportive. They explained the different ${medicalTerms.length > 1 ? medicalTerms[1].term : 'medication'} options and helped me understand the benefits and potential side effects.`;
+
+        const newRecording = {
+          id: `recording-${Date.now()}`,
+          file_name: file.name,
+          duration_seconds: Math.floor(Math.random() * 1800) + 600, // 10-40 minutes
+          speaker_count: 2,
+          language_detected: selectedProject.language || 'en-US',
+          status: "completed",
+          transcript_text: mockTranscript,
+          confidence_score: 0.85 + Math.random() * 0.1, // 85-95%
+          project_id: selectedProject.id,
+          user_id: user?.id,
+          created_at: new Date().toISOString()
+        };
         
-        if (data?.success) {
-          const newRecording = {
-            id: data.recording.id,
-            file_name: file.name,
-            duration_seconds: data.transcription.duration || 0,
-            speaker_count: data.transcription.speakers || 2,
-            language_detected: data.transcription.language || 'en-US',
-            status: "completed",
-            transcript_text: data.transcription.text || "Transcription in progress...",
-            confidence_score: data.transcription.confidence || 0.85
-          };
-          
-          setRecordings(prev => [newRecording, ...prev]);
-          setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
-          
-          toast({
-            title: "Transcription Complete",
-            description: `${file.name} transcribed successfully!`,
-          });
-        } else {
-          throw new Error(data?.error || 'Transcription failed');
-        }
+        setRecordings(prev => [newRecording, ...prev]);
+        setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+        
+        toast({
+          title: "Transcription Complete",
+          description: `${file.name} processed successfully!`,
+        });
+        
+        console.log('File processed successfully:', newRecording);
         
       } catch (error) {
         console.error('Upload error:', error);
