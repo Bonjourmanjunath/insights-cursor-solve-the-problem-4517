@@ -81,8 +81,14 @@ export default function SpeechStudio() {
     market: '',
     respondent_initials: '',
     specialty: '',
-    interview_date: ''
+    interview_date: '',
+    transcript_content: ''
   });
+  const [isRecordingActive, setIsRecordingActive] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState('');
+  const [recordingTimer, setRecordingTimer] = useState(null);
+  const [audioChunks, setAudioChunks] = useState([]);
+  const [currentStream, setCurrentStream] = useState(null);
 
   // Add authentication check
   const [user, setUser] = useState(null);
@@ -350,44 +356,56 @@ export default function SpeechStudio() {
   // REAL RECORDING FUNCTIONS
   const startRecording = async () => {
     try {
+      setRecordingStatus('Requesting microphone access...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      setCurrentStream(stream);
+      
+      const recorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
       
       setMediaRecorder(recorder);
       setIsRecording(true);
+      setIsRecordingActive(true);
       setRecordingTime(0);
+      setRecordingStatus('Recording in progress...');
+      setAudioChunks([]);
       
       // Start recording timer
       const timer = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
+      setRecordingTimer(timer);
       
       recorder.start();
       
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          // Handle recorded data
+          setAudioChunks(prev => [...prev, event.data]);
           console.log('Recording data available:', event.data.size, 'bytes');
         }
       };
       
       recorder.onstop = () => {
-        clearInterval(timer);
+        if (timer) clearInterval(timer);
+        setRecordingTimer(null);
         stream.getTracks().forEach(track => track.stop());
+        setCurrentStream(null);
+        setIsRecordingActive(false);
+        setRecordingStatus('Processing recording...');
         
-        toast({
-          title: "Recording Complete",
-          description: "Audio recorded successfully",
-        });
+        // Process the recorded audio
+        processRecordedAudio();
       };
       
       toast({
         title: "Recording Started",
-        description: "Microphone access granted. Recording in progress...",
+        description: "Microphone access granted. Recording in progress... Click Stop when finished.",
       });
       
     } catch (error) {
       console.error('Recording error:', error);
+      setRecordingStatus('');
       toast({
         title: "Recording Failed",
         description: "Could not access microphone. Please check permissions.",
@@ -400,6 +418,7 @@ export default function SpeechStudio() {
     if (mediaRecorder && isRecording) {
       mediaRecorder.stop();
       setIsRecording(false);
+      setRecordingStatus('Stopping recording...');
     }
   };
 
@@ -502,6 +521,69 @@ R: My healthcare team was very supportive. They explained the different ${medica
           });
         }, 3000);
       }
+    }
+  };
+
+  // Process recorded audio and save to project
+  const processRecordedAudio = async () => {
+    if (!selectedProject || audioChunks.length === 0) {
+      setRecordingStatus('');
+      return;
+    }
+
+    try {
+      setRecordingStatus('Converting audio...');
+      
+      // Combine audio chunks into a single blob
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      
+      // Convert to base64 for processing
+      const base64Audio = await fileToBase64(audioBlob);
+      
+      setRecordingStatus('Transcribing audio...');
+      
+      // Create a file name for the recording
+      const fileName = `Live_Recording_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+      
+      // Process the recording using the same pipeline as file uploads
+      const result = await supabase.functions.invoke('speech-transcriber', {
+        body: {
+          project_id: selectedProject.id,
+          file_name: fileName,
+          audio_data: base64Audio,
+          language: selectedProject.language,
+          medical_terms: medicalTerms.map(term => term.term)
+        }
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Transcription failed');
+      }
+
+      if (result.data?.success) {
+        const newRecording = result.data.recording;
+        setRecordings(prev => [newRecording, ...prev]);
+        
+        toast({
+          title: "Live Recording Complete!",
+          description: `Recording transcribed successfully. Duration: ${formatTime(recordingTime)}`,
+        });
+        
+        setRecordingStatus('');
+        setRecordingTime(0);
+        setAudioChunks([]);
+      } else {
+        throw new Error('Transcription service returned error');
+      }
+      
+    } catch (error) {
+      console.error('Recording processing error:', error);
+      setRecordingStatus('');
+      toast({
+        title: "Recording Processing Failed",
+        description: error.message || 'Failed to process recording',
+        variant: "destructive",
+      });
     }
   };
 
