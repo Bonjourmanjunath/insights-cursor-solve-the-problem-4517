@@ -5,6 +5,13 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import React from "react";
 
 // Import only essential components to avoid crashes
+import Landing from "./pages/Landing";
+import Features from "./pages/Features";
+import Pricing from "./pages/Pricing";
+import About from "./pages/About";
+import Contact from "./pages/Contact";
+import MarketingLayout from "./components/MarketingLayout";
+import LandingGuard from "./components/LandingGuard";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Projects from "./pages/Projects";
@@ -134,8 +141,39 @@ const App = () => {
           <Toaster />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<SpeechStudio />} />
+              {/* Marketing Routes */}
+              <Route path="/" element={
+                <LandingGuard>
+                  <MarketingLayout>
+                    <Landing />
+                  </MarketingLayout>
+                </LandingGuard>
+              } />
+              <Route path="/features" element={
+                <MarketingLayout>
+                  <Features />
+                </MarketingLayout>
+              } />
+              <Route path="/pricing" element={
+                <MarketingLayout>
+                  <Pricing />
+                </MarketingLayout>
+              } />
+              <Route path="/about" element={
+                <MarketingLayout>
+                  <About />
+                </MarketingLayout>
+              } />
+              <Route path="/contact" element={
+                <MarketingLayout>
+                  <Contact />
+                </MarketingLayout>
+              } />
+              
+              {/* Authentication */}
               <Route path="/auth" element={<Auth />} />
+              
+              {/* Dashboard Routes - UNCHANGED */}
               <Route path="/dashboard" element={
                 <AuthGuard>
                   <DashboardLayout />
@@ -150,8 +188,18 @@ const App = () => {
                 <Route path="projects/:projectId/chat" element={<ProjectChat />} />
                 <Route path="transcripts" element={<Transcripts />} />
               </Route>
+              
+              {/* Speech Studio - Additional Feature */}
               <Route path="/speech" element={<SpeechStudio />} />
-              <Route path="*" element={<SpeechStudio />} />
+              
+              {/* Fallback */}
+              <Route path="*" element={
+                <LandingGuard>
+                  <MarketingLayout>
+                    <Landing />
+                  </MarketingLayout>
+                </LandingGuard>
+              } />
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
