@@ -84,6 +84,35 @@ export default function SpeechStudio() {
     specialty: '',
     interview_date: '',
     transcript_content: ''
+  // Save recording edits function
+  const saveRecordingEdits = async () => {
+    if (!editingRecording) return;
+
+    try {
+      const { error } = await supabase
+        .from('speech_recordings')
+        .update({
+          file_name: editForm.display_name || editingRecording.file_name,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingRecording.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setRecordings(prev => prev.map(rec => 
+        rec.id === editingRecording.id 
+          ? { ...rec, file_name: editForm.display_name || rec.file_name }
+          : rec
+      ));
+
+      setEditingRecording(null);
+      console.log('Recording metadata updated successfully');
+    } catch (error) {
+      console.error('Error saving recording edits:', error);
+    }
+  };
+
   });
   const [isRecordingActive, setIsRecordingActive] = useState(false);
   const [recordingStatus, setRecordingStatus] = useState('');
