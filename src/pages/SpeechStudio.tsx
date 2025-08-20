@@ -1217,6 +1217,125 @@ R: My healthcare team was very supportive. They explained the different ${medica
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Recording Dialog */}
+      {editingRecording && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Edit className="h-5 w-5" />
+                Edit Recording: {editingRecording.display_name || editingRecording.file_name}
+              </CardTitle>
+              <CardDescription>
+                Edit metadata and transcript content for this recording
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Metadata Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="edit-display-name">Display Name</Label>
+                  <Input
+                    id="edit-display-name"
+                    value={editForm.display_name}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, display_name: e.target.value }))}
+                    placeholder="Custom name for this recording"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-project-number">Project Number</Label>
+                  <Input
+                    id="edit-project-number"
+                    value={editForm.project_number}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, project_number: e.target.value }))}
+                    placeholder="e.g., F04.24.832"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-market">Market</Label>
+                  <Input
+                    id="edit-market"
+                    value={editForm.market}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, market: e.target.value }))}
+                    placeholder="e.g., Germany, United States"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-respondent-initials">Respondent Initials</Label>
+                  <Input
+                    id="edit-respondent-initials"
+                    value={editForm.respondent_initials}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, respondent_initials: e.target.value }))}
+                    placeholder="e.g., DE09, JS12"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-specialty">Specialty</Label>
+                  <Input
+                    id="edit-specialty"
+                    value={editForm.specialty}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, specialty: e.target.value }))}
+                    placeholder="e.g., Cardiologist, Oncologist"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="edit-interview-date">Interview Date</Label>
+                  <Input
+                    id="edit-interview-date"
+                    type="date"
+                    value={editForm.interview_date}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, interview_date: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Transcript Content Editor */}
+              <div>
+                <Label htmlFor="edit-transcript">Transcript Content (I:/R: Format)</Label>
+                <Textarea
+                  id="edit-transcript"
+                  value={editForm.transcript_content}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, transcript_content: e.target.value }))}
+                  placeholder="Edit the transcript content here..."
+                  rows={12}
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Use I: for Interviewer and R: for Respondent. Each speaker should be on a new line.
+                </p>
+              </div>
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-4">
+                <Button 
+                  onClick={saveRecordingEdits} 
+                  disabled={loading}
+                  className="flex-1"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setEditingRecording(null)}
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
