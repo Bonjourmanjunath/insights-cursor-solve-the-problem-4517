@@ -70,6 +70,9 @@ export default function SpeechStudio() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState({});
+  const [processingFiles, setProcessingFiles] = useState(new Set());
 
   // Load data on component mount
   useEffect(() => {
@@ -351,42 +354,109 @@ export default function SpeechStudio() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     
+    if (!selectedProject) {
+      toast({
+        title: "No Project Selected",
+        description: "Please select a project first",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     for (const file of files) {
       try {
+        const fileId = `${Date.now()}-${file.name}`;
+        setProcessingFiles(prev => new Set([...prev, fileId]));
+        setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
+        
         toast({
           title: "File Upload Started",
           description: `Uploading ${file.name}...`,
         });
         
-        // Simulate upload process
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Update progress
+        setUploadProgress(prev => ({ ...prev, [fileId]: 25 }));
         
-        const newRecording = {
-          id: `recording-${Date.now()}`,
-          file_name: file.name,
-          duration_seconds: 1800,
-          speaker_count: 2,
-          language_detected: "en-US",
-          status: "completed",
-          transcript_text: "I: Sample interview question?\n\nR: Sample response from uploaded file."
-        };
+        // Convert file to base64 for API
+        const base64Audio = await fileToBase64(file);
+        setUploadProgress(prev => ({ ...prev, [fileId]: 50 }));
         
-        setRecordings(prev => [newRecording, ...prev]);
-        
-        toast({
-          title: "Upload Complete",
-          description: `${file.name} processed successfully`,
+        // Call speech transcription API
+        const { data, error } = await supabase.functions.invoke('speech-transcriber', {
+          body: {
+            project_id: selectedProject.id,
+            file_name: file.name,
+            audio_data: base64Audio,
+            language: selectedProject.language || 'en-US',
+            medical_terms: medicalTerms.map(term => term.term)
+          }
         });
+        
+        setUploadProgress(prev => ({ ...prev, [fileId]: 75 }));
+        
+        if (error) {
+          throw new Error(error.message);
+        }
+        
+        if (data?.success) {
+          const newRecording = {
+            id: data.recording.id,
+            file_name: file.name,
+            duration_seconds: data.transcription.duration || 0,
+            speaker_count: data.transcription.speakers || 2,
+            language_detected: data.transcription.language || 'en-US',
+            status: "completed",
+            transcript_text: data.transcription.text || "Transcription in progress...",
+            confidence_score: data.transcription.confidence || 0.85
+          };
+          
+          setRecordings(prev => [newRecording, ...prev]);
+          setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
+          
+          toast({
+            title: "Transcription Complete",
+            description: `${file.name} transcribed successfully!`,
+          });
+        } else {
+          throw new Error(data?.error || 'Transcription failed');
+        }
         
       } catch (error) {
         console.error('Upload error:', error);
         toast({
           title: "Upload Failed",
-          description: `Failed to upload ${file.name}`,
+          description: `Failed to process ${file.name}: ${error.message}`,
           variant: "destructive",
         });
+      } finally {
+        const fileId = `${Date.now()}-${file.name}`;
+        setProcessingFiles(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(fileId);
+          return newSet;
+        });
+        setTimeout(() => {
+          setUploadProgress(prev => {
+            const newProgress = { ...prev };
+            delete newProgress[fileId];
+            return newProgress;
+          });
+        }, 3000);
       }
     }
+  };
+
+  // Helper function to convert file to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1]; // Remove data:audio/wav;base64, prefix
+        resolve(base64);
+      };
+      reader.onerror = error => reject(error);
+    });
   };
 
   const formatTime = (seconds) => {
@@ -657,13 +727,40 @@ export default function SpeechStudio() {
                     onChange={handleFileUpload}
                     style={{ display: 'none' }}
                     id="audio-upload"
+                    disabled={!selectedProject}
                   />
                   <Button 
                     onClick={() => document.getElementById('audio-upload')?.click()}
-                    disabled={loading}
+                    disabled={loading || !selectedProject}
                   >
-                    {loading ? "Processing..." : "Upload Audio Files"}
+                    {processingFiles.size > 0 ? `Processing ${processingFiles.size} files...` : "Upload Audio Files"}
                   </Button>
+                  
+                  {!selectedProject && (
+                    <p className="text-xs text-red-500 mt-2">
+                      Please select a project first
+                    </p>
+                  )}
+                  
+                  {/* Upload Progress */}
+                  {Object.keys(uploadProgress).length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      {Object.entries(uploadProgress).map(([fileId, progress]) => (
+                        <div key={fileId} className="space-y-1">
+                          <div className="flex justify-between text-xs">
+                            <span>Processing...</span>
+                            <span>{progress}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
