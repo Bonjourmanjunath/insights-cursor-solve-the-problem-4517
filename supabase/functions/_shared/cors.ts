@@ -14,7 +14,7 @@ const pickOrigin = (req: Request) => {
 
 export const buildCorsHeaders = (req: Request) => ({
   "Access-Control-Allow-Origin": pickOrigin(req),
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
   "Vary": "Origin",
