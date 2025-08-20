@@ -412,10 +412,6 @@ export default function SpeechStudio() {
       
       try {
         // Simulate file processing
-        console.log('Processing file:', file.name);
-        console.log('Project:', selectedProject.name);
-        console.log('Medical terms:', medicalTerms.length);
-        
         setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
         
         toast({
@@ -423,18 +419,23 @@ export default function SpeechStudio() {
           description: `Uploading ${file.name}...`,
         });
         
-        // Update progress
+        // Simulate processing steps
+        await new Promise(resolve => setTimeout(resolve, 500));
         setUploadProgress(prev => ({ ...prev, [fileId]: 25 }));
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setUploadProgress(prev => ({ ...prev, [fileId]: 50 }));
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setUploadProgress(prev => ({ ...prev, [fileId]: 75 }));
+        
+        // Simulate transcription processing
+        console.log('Processing file:', file.name);
+        console.log('Project:', selectedProject.name);
+        console.log('Medical terms:', medicalTerms.length);
         
         // Simulate processing delay
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        setUploadProgress(prev => ({ ...prev, [fileId]: 50 }));
-        
-        // Simulate transcription processing
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        setUploadProgress(prev => ({ ...prev, [fileId]: 75 }));
         
         // Create mock transcription result
         const mockTranscript = `I: Thank you for participating in this interview. Can you tell me about your experience with ${medicalTerms.length > 0 ? medicalTerms[0].term : 'your treatment'}?
